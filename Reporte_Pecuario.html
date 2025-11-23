@@ -1,809 +1,861 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Upload, FileText, Filter, Download, Calculator, DollarSign, Hash, 
-  AlertCircle, Calendar, MapPin, FileDown, Leaf, ChevronDown, ChevronRight, 
-  CheckSquare, Square, MinusSquare, Search 
-} from 'lucide-react';
-
-// --- COMPONENTES AUXILIARES PARA FILTROS (DISEÑO COMPACTO) ---
-
-const FilterSection = ({ title, icon: Icon, isOpen, onToggle, children, onSelectAll, onDeselectAll, hasSelection, totalOptions, selectedCount }) => (
-  <div className="border-b border-gray-100 last:border-0">
-    <div 
-      className="group w-full flex items-center justify-between py-2 px-3 hover:bg-emerald-50/50 transition-colors cursor-pointer select-none"
-      onClick={onToggle}
-    >
-      <div className="flex items-center gap-2 text-gray-700 text-xs font-semibold uppercase tracking-wide">
-        <Icon className="w-3.5 h-3.5 text-emerald-600" />
-        <span>{title}</span>
-        {hasSelection && (
-          <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold ml-1">
-            {selectedCount}/{totalOptions}
-          </span>
-        )}
-      </div>
-      <ChevronRight className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
-    </div>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte Pecuario - Análisis Financiero</title>
     
-    {isOpen && (
-      <div className="px-3 pb-3 animate-in slide-in-from-top-1 duration-150">
-        <div className="flex items-center justify-end gap-3 mb-2 border-b border-gray-100 pb-1">
-          <button onClick={onSelectAll} className="text-[10px] text-emerald-600 hover:text-emerald-800 font-medium hover:underline uppercase tracking-wide">
-            Marcar Todo
-          </button>
-          <button onClick={onDeselectAll} className="text-[10px] text-gray-400 hover:text-gray-600 hover:underline uppercase tracking-wide">
-            Desmarcar
-          </button>
-        </div>
-        <div className="max-h-52 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar">
-          {children}
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-const StyledCheckbox = ({ label, checked, onChange, indeterminate = false, className = "", level = 0 }) => (
-  <label className={`flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 p-1 rounded transition-colors select-none ${className}`} style={{ paddingLeft: `${level * 4}px` }}>
-    <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0 border border-gray-300 rounded bg-white transition-all peer-checked:bg-emerald-600 peer-checked:border-emerald-600">
-       <input 
-        type="checkbox" 
-        checked={checked}
-        onChange={onChange}
-        ref={input => { if (input) input.indeterminate = indeterminate; }}
-        className="peer absolute opacity-0 w-full h-full cursor-pointer"
-      />
-      {/* Visual States */}
-      <div className={`pointer-events-none absolute inset-0 flex items-center justify-center text-white transition-opacity duration-100 ${checked || indeterminate ? 'opacity-100 bg-emerald-600 rounded-sm' : 'opacity-0'}`}>
-          {indeterminate ? (
-             <div className="w-2 h-0.5 bg-white rounded-full" /> 
-          ) : (
-             <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
-               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-             </svg>
-          )}
-      </div>
-    </div>
-    <span className={`truncate ${checked || indeterminate ? 'text-emerald-900 font-medium' : 'text-gray-600'}`}>
-      {label}
-    </span>
-  </label>
-);
-
-
-// --- COMPONENTE PRINCIPAL ---
-
-const ReportePecuario = () => {
-  const [data, setData] = useState([]);
-  const [fileName, setFileName] = useState('');
-  const [error, setError] = useState('');
-  const [isExcelReady, setIsExcelReady] = useState(false);
-  const [isPdfReady, setIsPdfReady] = useState(false);
-  
-  // Estados de Filtros
-  const [selectedEjercicios, setSelectedEjercicios] = useState(new Set());
-  const [selectedEstados, setSelectedEstados] = useState(new Set()); 
-  const [selectedFechas, setSelectedFechas] = useState(new Set()); 
-
-  // Estado de UI (Acordeones)
-  const [openSections, setOpenSections] = useState({
-    ejercicio: true,
-    estado: true, // Estado abierto por defecto
-    fecha: true   // Fecha abierta por defecto
-  });
-
-  // Estado para expansión del árbol de fechas
-  const [expandedDateNodes, setExpandedDateNodes] = useState(new Set());
-
-  const [customHeaderText, setCustomHeaderText] = useState('');
-
-  // Cargar librerías externas
-  useEffect(() => {
-    const loadScript = (src) => {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.async = true;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.body.appendChild(script);
-      });
-    };
-
-    if (!window.XLSX) {
-      loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js")
-        .then(() => setIsExcelReady(true))
-        .catch(e => console.error("Error cargando XLSX", e));
-    } else {
-      setIsExcelReady(true);
-    }
-
-    if (!window.jspdf) {
-      loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")
-        .then(() => {
-          return loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js");
-        })
-        .then(() => setIsPdfReady(true))
-        .catch(e => console.error("Error cargando jsPDF", e));
-    } else {
-      setIsPdfReady(true);
-    }
-  }, []);
-
-  // Helpers de parseo
-  const formatDate = (val) => {
-    if (!val) return 'Sin Fecha';
-    if (typeof val === 'number' && val > 20000) {
-      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
-      const userTimezoneOffset = date.getTimezoneOffset() * 60000;
-      const adjustedDate = new Date(date.getTime() + userTimezoneOffset);
-      return adjustedDate.toLocaleDateString('es-MX');
-    }
-    const dateObj = new Date(val);
-    if (!isNaN(dateObj.getTime())) {
-       const splitDate = val.toString().split(/[-/]/);
-       if (splitDate.length === 3) return dateObj.toLocaleDateString('es-MX'); 
-       return dateObj.toLocaleDateString('es-MX');
-    }
-    return val; 
-  };
-
-  const parseCSV = (text) => {
-    const lines = text.split(/\r?\n/);
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    const result = [];
-    const splitRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      const values = line.split(splitRegex).map(val => val.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-      if (values.length === headers.length) {
-        const row = {};
-        headers.forEach((header, index) => { row[header] = values[index]; });
-        result.push(row);
-      } else {
-         const row = {};
-         headers.forEach((header, index) => { if (values[index] !== undefined) row[header] = values[index]; });
-         result.push(row);
-      }
-    }
-    return result;
-  };
-
-  const processDataArray = (rawData, isExcel = false) => {
-     return rawData.map((row, index) => {
-        let ejercicio, rawFechaPago, tipoSeguro, rawUnidades, rawMonto, estado;
-        if (isExcel) {
-            const keys = Object.keys(row);
-            const findKey = (search) => keys.find(k => k.toUpperCase().includes(search));
-            ejercicio = row['EJERCICIO'] || row[findKey('EJERCICIO')] || 'Desconocido';
-            rawFechaPago = row['FECHA DE PAGO'] || row[findKey('FECHA DE PAGO')];
-            tipoSeguro = row['TIPO DE SEGURO'] || row[findKey('TIPO DE SEGURO')] || 'SIN ESPECIFICAR';
-            estado = row['ESTADO'] || row[findKey('ESTADO')] || 'SIN ESTADO';
-            rawUnidades = row['UNIDADES INDEMNIZADAS'] || row[findKey('UNIDADES INDEMNIZADAS')];
-            rawMonto = row['INDEMNIZACIÓN'] || row[findKey('INDEMNIZACIÓN')];
-        } else {
-            const keys = Object.keys(row);
-            ejercicio = row['EJERCICIO'] || row[keys[0]] || 'Desconocido';
-            rawFechaPago = row['FECHA DE PAGO'] || row[keys[1]];
-            tipoSeguro = row['TIPO DE SEGURO'] || row[keys[3]] || 'SIN ESPECIFICAR';
-            estado = row['ESTADO'] || row[keys[14]] || 'SIN ESTADO';
-            rawUnidades = row['UNIDADES INDEMNIZADAS'] || row[keys[26]]; 
-            rawMonto = row['INDEMNIZACIÓN'] || row[keys[28]];
+    <!-- 1. Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. Configuración de Módulos (Import Map) -->
+    <!-- Esto permite que los 'import' de React funcionen en el navegador -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.263.1"
         }
-        const fechaPago = formatDate(rawFechaPago);
-        const unidades = parseFloat((rawUnidades || '0').toString().replace(/[$,]/g, '')) || 0;
-        const monto = parseFloat((rawMonto || '0').toString().replace(/[$,]/g, '')) || 0;
-        return {
-            id: index,
-            ejercicio,
-            fechaPago, // string "dd/mm/yyyy"
-            estado: estado.toUpperCase().trim(),
-            tipoSeguro,
-            unidades,
-            monto
-        };
-    }).filter(item => item.tipoSeguro && item.tipoSeguro !== 'SIN ESPECIFICAR');
-  };
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    setError('');
-    if (!file) return;
-    setFileName(file.name);
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-
-    const processAndSet = (cleanData) => {
-        setData(cleanData);
-        // Por defecto seleccionamos TODO
-        setSelectedEjercicios(new Set(cleanData.map(d => d.ejercicio)));
-        setSelectedFechas(new Set(cleanData.map(d => d.fechaPago)));
-        setSelectedEstados(new Set(cleanData.map(d => d.estado)));
-        // Expandimos la sección de ejercicio por defecto
-        setOpenSections({ ejercicio: true, estado: false, fecha: true });
-    };
-
-    if (isExcel) {
-        if (!isExcelReady) { setError("Cargando lector Excel..."); return; }
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = window.XLSX.read(data, { type: 'array' });
-                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = window.XLSX.utils.sheet_to_json(worksheet, { raw: true }); 
-                processAndSet(processDataArray(jsonData, true));
-            } catch (err) { console.error(err); setError("Error en Excel."); }
-        };
-        reader.readAsArrayBuffer(file);
-    } else {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const cleanData = processDataArray(parseCSV(e.target.result), false);
-                processAndSet(cleanData);
-            } catch (err) { console.error(err); setError("Error en CSV."); }
-        };
-        reader.readAsText(file);
     }
-  };
+    </script>
 
-  // --- LÓGICA DE DATOS ÚNICOS ---
-  const opcionesEjercicios = useMemo(() => [...new Set(data.map(item => item.ejercicio))].sort(), [data]);
-  const opcionesEstados = useMemo(() => [...new Set(data.map(item => item.estado))].sort(), [data]);
-  
-  // --- ESTRUCTURA DE FECHAS (AÑO -> MES -> FECHA) ---
-  const dateTree = useMemo(() => {
-    const tree = {};
-    data.forEach(item => {
-        const [day, month, year] = item.fechaPago.split('/');
-        if (!day || !month || !year) return; 
+    <!-- 3. Babel para traducir JSX a JavaScript que el navegador entienda -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-        if (!tree[year]) tree[year] = {};
-        if (!tree[year][month]) tree[year][month] = [];
-        
-        if (!tree[year][month].includes(item.fechaPago)) {
-            tree[year][month].push(item.fechaPago);
+    <style>
+        /* Estilos personalizados para scrollbar y animaciones */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
         }
-    });
-    return tree;
-  }, [data]);
-
-  const sortedYears = useMemo(() => Object.keys(dateTree).sort((a, b) => b - a), [dateTree]);
-  const getSortedMonths = (year) => Object.keys(dateTree[year]).sort();
-  const getMonthName = (monthNum) => {
-      const date = new Date(2000, parseInt(monthNum) - 1, 1);
-      return date.toLocaleString('es-MX', { month: 'long' }).toUpperCase();
-  };
-
-  // --- MANEJADORES DE FILTROS ---
-  const toggleSection = (section) => {
-    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
-  };
-
-  const toggleSetItem = (set, val, setFunction) => {
-    const newSet = new Set(set);
-    if (newSet.has(val)) newSet.delete(val); else newSet.add(val);
-    setFunction(newSet);
-  };
-
-  const selectAll = (allOptions, setFunction) => setFunction(new Set(allOptions));
-  const deselectAll = (setFunction) => setFunction(new Set());
-
-  const toggleDateNode = (nodeId) => {
-      const newExpanded = new Set(expandedDateNodes);
-      if (newExpanded.has(nodeId)) newExpanded.delete(nodeId);
-      else newExpanded.add(nodeId);
-      setExpandedDateNodes(newExpanded);
-  };
-
-  const handleYearToggle = (year) => {
-      const months = dateTree[year];
-      let allDatesInYear = [];
-      Object.values(months).forEach(dateList => allDatesInYear.push(...dateList));
-      
-      const newSelected = new Set(selectedFechas);
-      const allSelected = allDatesInYear.every(d => newSelected.has(d));
-
-      if (allSelected) {
-          allDatesInYear.forEach(d => newSelected.delete(d));
-      } else {
-          allDatesInYear.forEach(d => newSelected.add(d));
-      }
-      setSelectedFechas(newSelected);
-  };
-
-  const handleMonthToggle = (year, month) => {
-      const dates = dateTree[year][month];
-      const newSelected = new Set(selectedFechas);
-      const allSelected = dates.every(d => newSelected.has(d));
-
-      if (allSelected) {
-          dates.forEach(d => newSelected.delete(d));
-      } else {
-          dates.forEach(d => newSelected.add(d));
-      }
-      setSelectedFechas(newSelected);
-  };
-
-  const getYearStatus = (year) => {
-      const months = dateTree[year];
-      let allDates = [];
-      Object.values(months).forEach(dl => allDates.push(...dl));
-      const selectedCount = allDates.filter(d => selectedFechas.has(d)).length;
-      if (selectedCount === 0) return 'unchecked';
-      if (selectedCount === allDates.length) return 'checked';
-      return 'indeterminate';
-  };
-
-  const getMonthStatus = (year, month) => {
-      const dates = dateTree[year][month];
-      const selectedCount = dates.filter(d => selectedFechas.has(d)).length;
-      if (selectedCount === 0) return 'unchecked';
-      if (selectedCount === dates.length) return 'checked';
-      return 'indeterminate';
-  };
-
-  // --- CÁLCULO DE DATOS FILTRADOS ---
-  const reporteAgrupado = useMemo(() => {
-    if (data.length === 0) return [];
-
-    const filtered = data.filter(item => 
-      selectedEjercicios.has(item.ejercicio) &&
-      selectedFechas.has(item.fechaPago) &&
-      selectedEstados.has(item.estado)
-    );
-
-    const agrupado = filtered.reduce((acc, curr) => {
-      const seguro = curr.tipoSeguro;
-      if (!acc[seguro]) acc[seguro] = { nombre: seguro, conteo: 0, totalUnidades: 0, totalMonto: 0 };
-      acc[seguro].conteo += 1;
-      acc[seguro].totalUnidades += curr.unidades;
-      acc[seguro].totalMonto += curr.monto;
-      return acc;
-    }, {});
-
-    return Object.values(agrupado).sort((a, b) => b.totalMonto - a.totalMonto);
-  }, [data, selectedEjercicios, selectedFechas, selectedEstados]);
-
-  const totales = useMemo(() => {
-    return reporteAgrupado.reduce((acc, item) => ({
-      conteo: acc.conteo + item.conteo,
-      unidades: acc.unidades + item.totalUnidades,
-      monto: acc.monto + item.totalMonto
-    }), { conteo: 0, unidades: 0, monto: 0 });
-  }, [reporteAgrupado]);
-
-  // --- PDF ---
-  const formatCurrency = (val) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
-  
-  const generatePDF = () => {
-    if (!window.jspdf) return;
-    const doc = new window.jspdf.jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-    const CORP_GREEN_DARK = [6, 78, 59];
-    const CORP_GREEN_MED = [21, 128, 61];
-    const CORP_GRAY_TEXT = [55, 65, 81];
-    const LIGHT_BG = [240, 253, 244];
-
-    let estadoTitulo = "TODOS LOS ESTADOS";
-    if (selectedEstados.size === 1) estadoTitulo = Array.from(selectedEstados)[0];
-    else if (selectedEstados.size > 1 && selectedEstados.size < opcionesEstados.length) estadoTitulo = "VARIOS ESTADOS";
-
-    doc.setFillColor(...CORP_GREEN_DARK);
-    doc.rect(0, 0, pageWidth, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    doc.text("REPORTE DE SINIESTRALIDAD", 14, 20);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text(`ESTADO: ${estadoTitulo}`, 14, 30);
-    doc.setFontSize(9);
-    const today = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
-    doc.text(`Generado: ${today}`, pageWidth - 14, 20, { align: 'right' });
-    doc.text(`Análisis Pecuario`, pageWidth - 14, 30, { align: 'right' });
-
-    let currentY = 50;
-    if (customHeaderText) {
-        doc.setTextColor(...CORP_GRAY_TEXT);
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "italic");
-        const splitText = doc.splitTextToSize(customHeaderText, pageWidth - 28);
-        doc.text(splitText, 14, currentY);
-        currentY += (splitText.length * 5) + 10;
-    }
-
-    doc.setFillColor(...LIGHT_BG); 
-    doc.setDrawColor(167, 243, 208);
-    doc.roundedRect(14, currentY, pageWidth - 28, 30, 1, 1, 'FD');
-    doc.setTextColor(...CORP_GREEN_DARK);
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.text("RESUMEN EJECUTIVO", 18, currentY + 8);
-
-    const boxWidth = pageWidth - 28;
-    const thirdWidth = boxWidth / 3;
-    const kpiCenterY = currentY + 18; 
-    const drawCenteredKPI = (label, value, sectionIndex, valueColor = [0,0,0]) => {
-        const centerX = 14 + (thirdWidth * sectionIndex) + (thirdWidth / 2);
-        doc.setFontSize(9);
-        doc.setTextColor(...CORP_GRAY_TEXT);
-        doc.setFont("helvetica", "normal");
-        doc.text(label, centerX, kpiCenterY - 2, { align: 'center' });
-        doc.setFontSize(12);
-        doc.setTextColor(...valueColor);
-        doc.setFont("helvetica", "bold");
-        doc.text(value, centerX, kpiCenterY + 5, { align: 'center' });
-    };
-
-    drawCenteredKPI("EVENTOS REGISTRADOS", totales.conteo.toString(), 0, CORP_GREEN_DARK);
-    doc.setDrawColor(209, 250, 229); 
-    doc.line(14 + thirdWidth, currentY + 6, 14 + thirdWidth, currentY + 24);
-    doc.line(14 + (thirdWidth * 2), currentY + 6, 14 + (thirdWidth * 2), currentY + 24);
-    drawCenteredKPI("TOTAL CABEZAS", new Intl.NumberFormat('es-MX').format(totales.unidades), 1, CORP_GREEN_DARK);
-    drawCenteredKPI("TOTAL INDEMNIZADO", formatCurrency(totales.monto), 2, CORP_GREEN_MED);
-
-    currentY += 40; 
-    const tableColumn = ["TIPO DE SEGURO", "FRECUENCIA", "CABEZAS", "MONTO INDEMNIZADO"];
-    const tableRows = [];
-    reporteAgrupado.forEach(row => {
-        tableRows.push([
-            row.nombre,
-            row.conteo,
-            new Intl.NumberFormat('es-MX').format(row.totalUnidades),
-            formatCurrency(row.totalMonto)
-        ]);
-    });
-    tableRows.push(["TOTAL GENERAL", totales.conteo, new Intl.NumberFormat('es-MX').format(totales.unidades), formatCurrency(totales.monto)]);
-
-    doc.autoTable({
-        head: [tableColumn], body: tableRows, startY: currentY, theme: 'grid', 
-        styles: { fontSize: 9, cellPadding: 4, valign: 'middle', lineColor: [229, 231, 235], lineWidth: 0.1, textColor: CORP_GRAY_TEXT },
-        headStyles: { fillColor: CORP_GREEN_DARK, textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
-        columnStyles: { 0: { cellWidth: 'auto', halign: 'left' }, 1: { cellWidth: 30, halign: 'center' }, 2: { cellWidth: 40, halign: 'right' }, 3: { cellWidth: 50, halign: 'right' } },
-        footStyles: { fillColor: LIGHT_BG, textColor: CORP_GREEN_DARK, fontStyle: 'bold' },
-        didParseCell: function (data) {
-            if (data.row.index === tableRows.length - 1) {
-                data.cell.styles.fontStyle = 'bold';
-                data.cell.styles.fillColor = [236, 253, 245];
-                data.cell.styles.textColor = CORP_GREEN_DARK;
-                if (data.column.index === 3) data.cell.styles.textColor = CORP_GREEN_MED;
-            }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
         }
-    });
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
 
-    const pageCount = doc.internal.getNumberOfPages();
-    doc.setTextColor(156, 163, 175);
-    doc.setFontSize(8);
-    for(var i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.line(14, doc.internal.pageSize.height - 15, pageWidth - 14, doc.internal.pageSize.height - 15); 
-        doc.text(`Página ${i} de ${pageCount}`, pageWidth - 14, doc.internal.pageSize.height - 10, {align: 'right'});
-    }
-    doc.save(`Reporte_Pecuario.pdf`);
-  };
+    <!-- 4. Tu Código de React -->
+    <script type="text/babel" data-type="module">
+        import React, { useState, useMemo, useEffect } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+            Upload, FileText, Filter, Download, Calculator, DollarSign, Hash, 
+            AlertCircle, Calendar, MapPin, FileDown, Leaf, ChevronDown, ChevronRight, 
+            CheckSquare, Square, MinusSquare, Search 
+        } from 'lucide-react';
 
-  return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-800 flex flex-col">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
-          <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className="bg-emerald-100 p-2 rounded-lg">
-                    <Leaf className="w-6 h-6 text-emerald-700" />
+        // --- COMPONENTES AUXILIARES PARA FILTROS (DISEÑO COMPACTO) ---
+
+        const FilterSection = ({ title, icon: Icon, isOpen, onToggle, children, onSelectAll, onDeselectAll, hasSelection, totalOptions, selectedCount }) => (
+        <div className="border-b border-gray-100 last:border-0">
+            <div 
+            className="group w-full flex items-center justify-between py-2 px-3 hover:bg-emerald-50/50 transition-colors cursor-pointer select-none"
+            onClick={onToggle}
+            >
+            <div className="flex items-center gap-2 text-gray-700 text-xs font-semibold uppercase tracking-wide">
+                <Icon className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{title}</span>
+                {hasSelection && (
+                <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold ml-1">
+                    {selectedCount}/{totalOptions}
+                </span>
+                )}
+            </div>
+            <ChevronRight className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
+            </div>
+            
+            {isOpen && (
+            <div className="px-3 pb-3 animate-in slide-in-from-top-1 duration-150">
+                <div className="flex items-center justify-end gap-3 mb-2 border-b border-gray-100 pb-1">
+                <button onClick={onSelectAll} className="text-[10px] text-emerald-600 hover:text-emerald-800 font-medium hover:underline uppercase tracking-wide">
+                    Marcar Todo
+                </button>
+                <button onClick={onDeselectAll} className="text-[10px] text-gray-400 hover:text-gray-600 hover:underline uppercase tracking-wide">
+                    Desmarcar
+                </button>
                 </div>
-                <div>
-                    <h1 className="text-xl font-bold text-emerald-900">Reporte Pecuario</h1>
-                    <p className="text-xs text-gray-500">Análisis Financiero y Estadístico</p>
+                <div className="max-h-52 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar">
+                {children}
                 </div>
             </div>
-            {data.length > 0 && (
-                <div className="flex gap-2">
-                     <button 
-                      onClick={generatePDF}
-                      disabled={!isPdfReady}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all text-white
-                          ${isPdfReady ? 'bg-[#064E3B] hover:bg-[#022c22]' : 'bg-gray-300 cursor-not-allowed'}`}
-                  >
-                      <FileDown className="w-4 h-4" />
-                      {isPdfReady ? 'PDF' : '...'}
-                  </button>
-                </div>
             )}
-          </div>
-      </div>
+        </div>
+        );
 
-      {/* Main Layout */}
-      <div className="flex-1 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6 p-4">
+        const StyledCheckbox = ({ label, checked, onChange, indeterminate = false, className = "", level = 0 }) => (
+        <label className={`flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 p-1 rounded transition-colors select-none ${className}`} style={{ paddingLeft: `${level * 4}px` }}>
+            <div className="relative flex items-center justify-center w-3.5 h-3.5 shrink-0 border border-gray-300 rounded bg-white transition-all peer-checked:bg-emerald-600 peer-checked:border-emerald-600">
+            <input 
+                type="checkbox" 
+                checked={checked}
+                onChange={onChange}
+                ref={input => { if (input) input.indeterminate = indeterminate; }}
+                className="peer absolute opacity-0 w-full h-full cursor-pointer"
+            />
+            {/* Visual States */}
+            <div className={`pointer-events-none absolute inset-0 flex items-center justify-center text-white transition-opacity duration-100 ${checked || indeterminate ? 'opacity-100 bg-emerald-600 rounded-sm' : 'opacity-0'}`}>
+                {indeterminate ? (
+                    <div className="w-2 h-0.5 bg-white rounded-full" /> 
+                ) : (
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                )}
+            </div>
+            </div>
+            <span className={`truncate ${checked || indeterminate ? 'text-emerald-900 font-medium' : 'text-gray-600'}`}>
+            {label}
+            </span>
+        </label>
+        );
+
+
+        // --- COMPONENTE PRINCIPAL ---
+
+        const ReportePecuario = () => {
+        const [data, setData] = useState([]);
+        const [fileName, setFileName] = useState('');
+        const [error, setError] = useState('');
+        const [isExcelReady, setIsExcelReady] = useState(false);
+        const [isPdfReady, setIsPdfReady] = useState(false);
         
-        {/* SIDEBAR (FILTROS COMPACTOS) */}
-        <div className="lg:col-span-3 space-y-4">
-          
-          {/* Upload Area Compacta */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-             <div className="bg-gray-50 p-2.5 border-b border-gray-100">
-                 <h3 className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-2 tracking-wider">
-                     <Upload className="w-3 h-3" /> Carga de Datos
-                 </h3>
-             </div>
-             <div className="p-3">
-                 <label className={`flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer transition-all
-                    ${isExcelReady ? 'border-emerald-200 hover:bg-emerald-50' : 'border-gray-200 bg-gray-50'}`}>
-                    <div className="flex flex-col items-center justify-center py-2">
-                        <Upload className={`w-5 h-5 mb-1 ${fileName ? 'text-emerald-600' : 'text-gray-400'}`} />
-                        <p className="text-[10px] text-gray-500 text-center px-1 truncate w-40">
-                            {fileName || "Click para subir Excel/CSV"}
-                        </p>
+        // Estados de Filtros
+        const [selectedEjercicios, setSelectedEjercicios] = useState(new Set());
+        const [selectedEstados, setSelectedEstados] = useState(new Set()); 
+        const [selectedFechas, setSelectedFechas] = useState(new Set()); 
+
+        // Estado de UI (Acordeones)
+        const [openSections, setOpenSections] = useState({
+            ejercicio: true,
+            estado: true, // Estado abierto por defecto
+            fecha: true   // Fecha abierta por defecto
+        });
+
+        // Estado para expansión del árbol de fechas
+        const [expandedDateNodes, setExpandedDateNodes] = useState(new Set());
+
+        const [customHeaderText, setCustomHeaderText] = useState('');
+
+        // Cargar librerías externas
+        useEffect(() => {
+            const loadScript = (src) => {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.body.appendChild(script);
+            });
+            };
+
+            if (!window.XLSX) {
+            loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js")
+                .then(() => setIsExcelReady(true))
+                .catch(e => console.error("Error cargando XLSX", e));
+            } else {
+            setIsExcelReady(true);
+            }
+
+            if (!window.jspdf) {
+            loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")
+                .then(() => {
+                return loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js");
+                })
+                .then(() => setIsPdfReady(true))
+                .catch(e => console.error("Error cargando jsPDF", e));
+            } else {
+            setIsPdfReady(true);
+            }
+        }, []);
+
+        // Helpers de parseo
+        const formatDate = (val) => {
+            if (!val) return 'Sin Fecha';
+            if (typeof val === 'number' && val > 20000) {
+            const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+            const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+            const adjustedDate = new Date(date.getTime() + userTimezoneOffset);
+            return adjustedDate.toLocaleDateString('es-MX');
+            }
+            const dateObj = new Date(val);
+            if (!isNaN(dateObj.getTime())) {
+            const splitDate = val.toString().split(/[-/]/);
+            if (splitDate.length === 3) return dateObj.toLocaleDateString('es-MX'); 
+            return dateObj.toLocaleDateString('es-MX');
+            }
+            return val; 
+        };
+
+        const parseCSV = (text) => {
+            const lines = text.split(/\r?\n/);
+            if (lines.length < 2) return [];
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            const result = [];
+            const splitRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+            for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            const values = line.split(splitRegex).map(val => val.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+            if (values.length === headers.length) {
+                const row = {};
+                headers.forEach((header, index) => { row[header] = values[index]; });
+                result.push(row);
+            } else {
+                const row = {};
+                headers.forEach((header, index) => { if (values[index] !== undefined) row[header] = values[index]; });
+                result.push(row);
+            }
+            }
+            return result;
+        };
+
+        const processDataArray = (rawData, isExcel = false) => {
+            return rawData.map((row, index) => {
+                let ejercicio, rawFechaPago, tipoSeguro, rawUnidades, rawMonto, estado;
+                if (isExcel) {
+                    const keys = Object.keys(row);
+                    const findKey = (search) => keys.find(k => k.toUpperCase().includes(search));
+                    ejercicio = row['EJERCICIO'] || row[findKey('EJERCICIO')] || 'Desconocido';
+                    rawFechaPago = row['FECHA DE PAGO'] || row[findKey('FECHA DE PAGO')];
+                    tipoSeguro = row['TIPO DE SEGURO'] || row[findKey('TIPO DE SEGURO')] || 'SIN ESPECIFICAR';
+                    estado = row['ESTADO'] || row[findKey('ESTADO')] || 'SIN ESTADO';
+                    rawUnidades = row['UNIDADES INDEMNIZADAS'] || row[findKey('UNIDADES INDEMNIZADAS')];
+                    rawMonto = row['INDEMNIZACIÓN'] || row[findKey('INDEMNIZACIÓN')];
+                } else {
+                    const keys = Object.keys(row);
+                    ejercicio = row['EJERCICIO'] || row[keys[0]] || 'Desconocido';
+                    rawFechaPago = row['FECHA DE PAGO'] || row[keys[1]];
+                    tipoSeguro = row['TIPO DE SEGURO'] || row[keys[3]] || 'SIN ESPECIFICAR';
+                    estado = row['ESTADO'] || row[keys[14]] || 'SIN ESTADO';
+                    rawUnidades = row['UNIDADES INDEMNIZADAS'] || row[keys[26]]; 
+                    rawMonto = row['INDEMNIZACIÓN'] || row[keys[28]];
+                }
+                const fechaPago = formatDate(rawFechaPago);
+                const unidades = parseFloat((rawUnidades || '0').toString().replace(/[$,]/g, '')) || 0;
+                const monto = parseFloat((rawMonto || '0').toString().replace(/[$,]/g, '')) || 0;
+                return {
+                    id: index,
+                    ejercicio,
+                    fechaPago, // string "dd/mm/yyyy"
+                    estado: estado.toUpperCase().trim(),
+                    tipoSeguro,
+                    unidades,
+                    monto
+                };
+            }).filter(item => item.tipoSeguro && item.tipoSeguro !== 'SIN ESPECIFICAR');
+        };
+
+        const handleFileUpload = (event) => {
+            const file = event.target.files[0];
+            setError('');
+            if (!file) return;
+            setFileName(file.name);
+            const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+            const processAndSet = (cleanData) => {
+                setData(cleanData);
+                // Por defecto seleccionamos TODO
+                setSelectedEjercicios(new Set(cleanData.map(d => d.ejercicio)));
+                setSelectedFechas(new Set(cleanData.map(d => d.fechaPago)));
+                setSelectedEstados(new Set(cleanData.map(d => d.estado)));
+                // Expandimos la sección de ejercicio por defecto
+                setOpenSections({ ejercicio: true, estado: false, fecha: true });
+            };
+
+            if (isExcel) {
+                if (!isExcelReady) { setError("Cargando lector Excel..."); return; }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = window.XLSX.read(data, { type: 'array' });
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = window.XLSX.utils.sheet_to_json(worksheet, { raw: true }); 
+                        processAndSet(processDataArray(jsonData, true));
+                    } catch (err) { console.error(err); setError("Error en Excel."); }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const cleanData = processDataArray(parseCSV(e.target.result), false);
+                        processAndSet(cleanData);
+                    } catch (err) { console.error(err); setError("Error en CSV."); }
+                };
+                reader.readAsText(file);
+            }
+        };
+
+        // --- LÓGICA DE DATOS ÚNICOS ---
+        const opcionesEjercicios = useMemo(() => [...new Set(data.map(item => item.ejercicio))].sort(), [data]);
+        const opcionesEstados = useMemo(() => [...new Set(data.map(item => item.estado))].sort(), [data]);
+        
+        // --- ESTRUCTURA DE FECHAS (AÑO -> MES -> FECHA) ---
+        const dateTree = useMemo(() => {
+            const tree = {};
+            data.forEach(item => {
+                const [day, month, year] = item.fechaPago.split('/');
+                if (!day || !month || !year) return; 
+
+                if (!tree[year]) tree[year] = {};
+                if (!tree[year][month]) tree[year][month] = [];
+                
+                if (!tree[year][month].includes(item.fechaPago)) {
+                    tree[year][month].push(item.fechaPago);
+                }
+            });
+            return tree;
+        }, [data]);
+
+        const sortedYears = useMemo(() => Object.keys(dateTree).sort((a, b) => b - a), [dateTree]);
+        const getSortedMonths = (year) => Object.keys(dateTree[year]).sort();
+        const getMonthName = (monthNum) => {
+            const date = new Date(2000, parseInt(monthNum) - 1, 1);
+            return date.toLocaleString('es-MX', { month: 'long' }).toUpperCase();
+        };
+
+        // --- MANEJADORES DE FILTROS ---
+        const toggleSection = (section) => {
+            setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+        };
+
+        const toggleSetItem = (set, val, setFunction) => {
+            const newSet = new Set(set);
+            if (newSet.has(val)) newSet.delete(val); else newSet.add(val);
+            setFunction(newSet);
+        };
+
+        const selectAll = (allOptions, setFunction) => setFunction(new Set(allOptions));
+        const deselectAll = (setFunction) => setFunction(new Set());
+
+        const toggleDateNode = (nodeId) => {
+            const newExpanded = new Set(expandedDateNodes);
+            if (newExpanded.has(nodeId)) newExpanded.delete(nodeId);
+            else newExpanded.add(nodeId);
+            setExpandedDateNodes(newExpanded);
+        };
+
+        const handleYearToggle = (year) => {
+            const months = dateTree[year];
+            let allDatesInYear = [];
+            Object.values(months).forEach(dateList => allDatesInYear.push(...dateList));
+            
+            const newSelected = new Set(selectedFechas);
+            const allSelected = allDatesInYear.every(d => newSelected.has(d));
+
+            if (allSelected) {
+                allDatesInYear.forEach(d => newSelected.delete(d));
+            } else {
+                allDatesInYear.forEach(d => newSelected.add(d));
+            }
+            setSelectedFechas(newSelected);
+        };
+
+        const handleMonthToggle = (year, month) => {
+            const dates = dateTree[year][month];
+            const newSelected = new Set(selectedFechas);
+            const allSelected = dates.every(d => newSelected.has(d));
+
+            if (allSelected) {
+                dates.forEach(d => newSelected.delete(d));
+            } else {
+                dates.forEach(d => newSelected.add(d));
+            }
+            setSelectedFechas(newSelected);
+        };
+
+        const getYearStatus = (year) => {
+            const months = dateTree[year];
+            let allDates = [];
+            Object.values(months).forEach(dl => allDates.push(...dl));
+            const selectedCount = allDates.filter(d => selectedFechas.has(d)).length;
+            if (selectedCount === 0) return 'unchecked';
+            if (selectedCount === allDates.length) return 'checked';
+            return 'indeterminate';
+        };
+
+        const getMonthStatus = (year, month) => {
+            const dates = dateTree[year][month];
+            const selectedCount = dates.filter(d => selectedFechas.has(d)).length;
+            if (selectedCount === 0) return 'unchecked';
+            if (selectedCount === dates.length) return 'checked';
+            return 'indeterminate';
+        };
+
+        // --- CÁLCULO DE DATOS FILTRADOS ---
+        const reporteAgrupado = useMemo(() => {
+            if (data.length === 0) return [];
+
+            const filtered = data.filter(item => 
+            selectedEjercicios.has(item.ejercicio) &&
+            selectedFechas.has(item.fechaPago) &&
+            selectedEstados.has(item.estado)
+            );
+
+            const agrupado = filtered.reduce((acc, curr) => {
+            const seguro = curr.tipoSeguro;
+            if (!acc[seguro]) acc[seguro] = { nombre: seguro, conteo: 0, totalUnidades: 0, totalMonto: 0 };
+            acc[seguro].conteo += 1;
+            acc[seguro].totalUnidades += curr.unidades;
+            acc[seguro].totalMonto += curr.monto;
+            return acc;
+            }, {});
+
+            return Object.values(agrupado).sort((a, b) => b.totalMonto - a.totalMonto);
+        }, [data, selectedEjercicios, selectedFechas, selectedEstados]);
+
+        const totales = useMemo(() => {
+            return reporteAgrupado.reduce((acc, item) => ({
+            conteo: acc.conteo + item.conteo,
+            unidades: acc.unidades + item.totalUnidades,
+            monto: acc.monto + item.totalMonto
+            }), { conteo: 0, unidades: 0, monto: 0 });
+        }, [reporteAgrupado]);
+
+        // --- PDF ---
+        const formatCurrency = (val) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
+        
+        const generatePDF = () => {
+            if (!window.jspdf) return;
+            const doc = new window.jspdf.jsPDF();
+            const pageWidth = doc.internal.pageSize.width;
+            const CORP_GREEN_DARK = [6, 78, 59];
+            const CORP_GREEN_MED = [21, 128, 61];
+            const CORP_GRAY_TEXT = [55, 65, 81];
+            const LIGHT_BG = [240, 253, 244];
+
+            let estadoTitulo = "TODOS LOS ESTADOS";
+            if (selectedEstados.size === 1) estadoTitulo = Array.from(selectedEstados)[0];
+            else if (selectedEstados.size > 1 && selectedEstados.size < opcionesEstados.length) estadoTitulo = "VARIOS ESTADOS";
+
+            doc.setFillColor(...CORP_GREEN_DARK);
+            doc.rect(0, 0, pageWidth, 40, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(20);
+            doc.setFont("helvetica", "bold");
+            doc.text("REPORTE DE SINIESTRALIDAD", 14, 20);
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "normal");
+            doc.text(`ESTADO: ${estadoTitulo}`, 14, 30);
+            doc.setFontSize(9);
+            const today = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+            doc.text(`Generado: ${today}`, pageWidth - 14, 20, { align: 'right' });
+            doc.text(`Análisis Pecuario`, pageWidth - 14, 30, { align: 'right' });
+
+            let currentY = 50;
+            if (customHeaderText) {
+                doc.setTextColor(...CORP_GRAY_TEXT);
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "italic");
+                const splitText = doc.splitTextToSize(customHeaderText, pageWidth - 28);
+                doc.text(splitText, 14, currentY);
+                currentY += (splitText.length * 5) + 10;
+            }
+
+            doc.setFillColor(...LIGHT_BG); 
+            doc.setDrawColor(167, 243, 208);
+            doc.roundedRect(14, currentY, pageWidth - 28, 30, 1, 1, 'FD');
+            doc.setTextColor(...CORP_GREEN_DARK);
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "bold");
+            doc.text("RESUMEN EJECUTIVO", 18, currentY + 8);
+
+            const boxWidth = pageWidth - 28;
+            const thirdWidth = boxWidth / 3;
+            const kpiCenterY = currentY + 18; 
+            const drawCenteredKPI = (label, value, sectionIndex, valueColor = [0,0,0]) => {
+                const centerX = 14 + (thirdWidth * sectionIndex) + (thirdWidth / 2);
+                doc.setFontSize(9);
+                doc.setTextColor(...CORP_GRAY_TEXT);
+                doc.setFont("helvetica", "normal");
+                doc.text(label, centerX, kpiCenterY - 2, { align: 'center' });
+                doc.setFontSize(12);
+                doc.setTextColor(...valueColor);
+                doc.setFont("helvetica", "bold");
+                doc.text(value, centerX, kpiCenterY + 5, { align: 'center' });
+            };
+
+            drawCenteredKPI("EVENTOS REGISTRADOS", totales.conteo.toString(), 0, CORP_GREEN_DARK);
+            doc.setDrawColor(209, 250, 229); 
+            doc.line(14 + thirdWidth, currentY + 6, 14 + thirdWidth, currentY + 24);
+            doc.line(14 + (thirdWidth * 2), currentY + 6, 14 + (thirdWidth * 2), currentY + 24);
+            drawCenteredKPI("TOTAL CABEZAS", new Intl.NumberFormat('es-MX').format(totales.unidades), 1, CORP_GREEN_DARK);
+            drawCenteredKPI("TOTAL INDEMNIZADO", formatCurrency(totales.monto), 2, CORP_GREEN_MED);
+
+            currentY += 40; 
+            const tableColumn = ["TIPO DE SEGURO", "FRECUENCIA", "CABEZAS", "MONTO INDEMNIZADO"];
+            const tableRows = [];
+            reporteAgrupado.forEach(row => {
+                tableRows.push([
+                    row.nombre,
+                    row.conteo,
+                    new Intl.NumberFormat('es-MX').format(row.totalUnidades),
+                    formatCurrency(row.totalMonto)
+                ]);
+            });
+            tableRows.push(["TOTAL GENERAL", totales.conteo, new Intl.NumberFormat('es-MX').format(totales.unidades), formatCurrency(totales.monto)]);
+
+            doc.autoTable({
+                head: [tableColumn], body: tableRows, startY: currentY, theme: 'grid', 
+                styles: { fontSize: 9, cellPadding: 4, valign: 'middle', lineColor: [229, 231, 235], lineWidth: 0.1, textColor: CORP_GRAY_TEXT },
+                headStyles: { fillColor: CORP_GREEN_DARK, textColor: 255, fontStyle: 'bold', halign: 'center', lineWidth: 0 },
+                columnStyles: { 0: { cellWidth: 'auto', halign: 'left' }, 1: { cellWidth: 30, halign: 'center' }, 2: { cellWidth: 40, halign: 'right' }, 3: { cellWidth: 50, halign: 'right' } },
+                footStyles: { fillColor: LIGHT_BG, textColor: CORP_GREEN_DARK, fontStyle: 'bold' },
+                didParseCell: function (data) {
+                    if (data.row.index === tableRows.length - 1) {
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.fillColor = [236, 253, 245];
+                        data.cell.styles.textColor = CORP_GREEN_DARK;
+                        if (data.column.index === 3) data.cell.styles.textColor = CORP_GREEN_MED;
+                    }
+                }
+            });
+
+            const pageCount = doc.internal.getNumberOfPages();
+            doc.setTextColor(156, 163, 175);
+            doc.setFontSize(8);
+            for(var i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.line(14, doc.internal.pageSize.height - 15, pageWidth - 14, doc.internal.pageSize.height - 15); 
+                doc.text(`Página ${i} de ${pageCount}`, pageWidth - 14, doc.internal.pageSize.height - 10, {align: 'right'});
+            }
+            doc.save(`Reporte_Pecuario.pdf`);
+        };
+
+        return (
+            <div className="min-h-screen bg-gray-50 font-sans text-gray-800 flex flex-col">
+            {/* Header */}
+            <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-20">
+                <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-emerald-100 p-2 rounded-lg">
+                            <Leaf className="w-6 h-6 text-emerald-700" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-emerald-900">Reporte Pecuario</h1>
+                            <p className="text-xs text-gray-500">Análisis Financiero y Estadístico</p>
+                        </div>
                     </div>
-                    <input type="file" className="hidden" accept=".csv,.txt,.xlsx,.xls" onChange={handleFileUpload} disabled={!isExcelReady} />
-                 </label>
-                 {error && <p className="text-[10px] text-red-500 mt-1">{error}</p>}
-             </div>
-          </div>
-          
-          {/* Filtros Accordion Compactos */}
-          {data.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="bg-gray-50 p-2.5 border-b border-gray-100 flex justify-between items-center">
-                     <h3 className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-2 tracking-wider">
-                         <Filter className="w-3 h-3" /> Filtros Activos
-                     </h3>
-                     <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">
-                        {reporteAgrupado.length} items
-                     </span>
+                    {data.length > 0 && (
+                        <div className="flex gap-2">
+                            <button 
+                            onClick={generatePDF}
+                            disabled={!isPdfReady}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all text-white
+                                ${isPdfReady ? 'bg-[#064E3B] hover:bg-[#022c22]' : 'bg-gray-300 cursor-not-allowed'}`}
+                        >
+                            <FileDown className="w-4 h-4" />
+                            {isPdfReady ? 'PDF' : '...'}
+                        </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Main Layout */}
+            <div className="flex-1 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6 p-4">
+                
+                {/* SIDEBAR (FILTROS COMPACTOS) */}
+                <div className="lg:col-span-3 space-y-4">
+                
+                {/* Upload Area Compacta */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-gray-50 p-2.5 border-b border-gray-100">
+                        <h3 className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-2 tracking-wider">
+                            <Upload className="w-3 h-3" /> Carga de Datos
+                        </h3>
+                    </div>
+                    <div className="p-3">
+                        <label className={`flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer transition-all
+                            ${isExcelReady ? 'border-emerald-200 hover:bg-emerald-50' : 'border-gray-200 bg-gray-50'}`}>
+                            <div className="flex flex-col items-center justify-center py-2">
+                                <Upload className={`w-5 h-5 mb-1 ${fileName ? 'text-emerald-600' : 'text-gray-400'}`} />
+                                <p className="text-[10px] text-gray-500 text-center px-1 truncate w-40">
+                                    {fileName || "Click para subir Excel/CSV"}
+                                </p>
+                            </div>
+                            <input type="file" className="hidden" accept=".csv,.txt,.xlsx,.xls" onChange={handleFileUpload} disabled={!isExcelReady} />
+                        </label>
+                        {error && <p className="text-[10px] text-red-500 mt-1">{error}</p>}
+                    </div>
                 </div>
                 
-                <div className="divide-y divide-gray-50">
-                    {/* Filtro Ejercicio */}
-                    <FilterSection 
-                        title="Ejercicio Fiscal" 
-                        icon={Calendar}
-                        isOpen={openSections.ejercicio}
-                        onToggle={() => toggleSection('ejercicio')}
-                        onSelectAll={() => selectAll(opcionesEjercicios, setSelectedEjercicios)}
-                        onDeselectAll={() => deselectAll(setSelectedEjercicios)}
-                        hasSelection={selectedEjercicios.size > 0}
-                        totalOptions={opcionesEjercicios.length}
-                        selectedCount={selectedEjercicios.size}
-                    >
-                        {opcionesEjercicios.map(ej => (
-                            <StyledCheckbox 
-                                key={ej} 
-                                label={ej} 
-                                checked={selectedEjercicios.has(ej)} 
-                                onChange={() => toggleSetItem(selectedEjercicios, ej, setSelectedEjercicios)} 
-                            />
-                        ))}
-                    </FilterSection>
-
-                    {/* Filtro Estado */}
-                    <FilterSection 
-                        title="Entidad Federativa" 
-                        icon={MapPin}
-                        isOpen={openSections.estado}
-                        onToggle={() => toggleSection('estado')}
-                        onSelectAll={() => selectAll(opcionesEstados, setSelectedEstados)}
-                        onDeselectAll={() => deselectAll(setSelectedEstados)}
-                        hasSelection={selectedEstados.size > 0}
-                        totalOptions={opcionesEstados.length}
-                        selectedCount={selectedEstados.size}
-                    >
-                        {opcionesEstados.map(estado => (
-                            <StyledCheckbox 
-                                key={estado} 
-                                label={estado} 
-                                checked={selectedEstados.has(estado)} 
-                                onChange={() => toggleSetItem(selectedEstados, estado, setSelectedEstados)} 
-                            />
-                        ))}
-                    </FilterSection>
-
-                    {/* Filtro Fechas Jerárquico (Árbol Compacto) */}
-                    <FilterSection 
-                        title="Fecha de Pago" 
-                        icon={Calendar}
-                        isOpen={openSections.fecha}
-                        onToggle={() => toggleSection('fecha')}
-                        onSelectAll={() => selectAll(data.map(d => d.fechaPago), setSelectedFechas)}
-                        onDeselectAll={() => deselectAll(setSelectedFechas)}
-                        hasSelection={selectedFechas.size > 0}
-                        totalOptions={data.length} // Aproximado
-                        selectedCount={selectedFechas.size}
-                    >
-                        <div className="space-y-1 mt-1">
-                            {sortedYears.map(year => {
-                                const yearStatus = getYearStatus(year);
-                                const isYearExpanded = expandedDateNodes.has(year);
-                                
-                                return (
-                                    <div key={year} className="relative">
-                                        {/* Línea Guía del Año */}
-                                        
-                                        <div className="flex items-center group">
-                                            <button 
-                                                onClick={() => toggleDateNode(year)}
-                                                className="p-0.5 mr-1 hover:bg-gray-100 rounded text-gray-400 hover:text-emerald-600 transition-colors"
-                                            >
-                                                {isYearExpanded ? <ChevronDown className="w-3 h-3"/> : <ChevronRight className="w-3 h-3"/>}
-                                            </button>
-                                            <StyledCheckbox 
-                                                label={`Año ${year}`}
-                                                checked={yearStatus === 'checked'}
-                                                indeterminate={yearStatus === 'indeterminate'}
-                                                onChange={() => handleYearToggle(year)}
-                                                className="flex-1"
-                                            />
-                                        </div>
-
-                                        {/* Meses (Hijos del Año) */}
-                                        {isYearExpanded && (
-                                            <div className="ml-1.5 pl-2 border-l border-gray-200 space-y-1 mt-0.5 pb-1">
-                                                {getSortedMonths(year).map((month, mIdx) => {
-                                                    const monthId = `${year}-${month}`;
-                                                    const monthStatus = getMonthStatus(year, month);
-                                                    const isMonthExpanded = expandedDateNodes.has(monthId);
-
-                                                    return (
-                                                        <div key={monthId} className="relative">
-                                                            {/* Línea horizontal decorativa */}
-                                                            <div className="absolute -left-2 top-2.5 w-1.5 h-px bg-gray-200"></div>
-
-                                                            <div className="flex items-center">
-                                                                <button 
-                                                                    onClick={() => toggleDateNode(monthId)}
-                                                                    className="p-0.5 mr-1 hover:bg-gray-100 rounded text-gray-400 hover:text-emerald-600 z-10 bg-white"
-                                                                >
-                                                                    {isMonthExpanded ? <ChevronDown className="w-3 h-3"/> : <ChevronRight className="w-3 h-3"/>}
-                                                                </button>
-                                                                <StyledCheckbox 
-                                                                    label={getMonthName(month)}
-                                                                    checked={monthStatus === 'checked'}
-                                                                    indeterminate={monthStatus === 'indeterminate'}
-                                                                    onChange={() => handleMonthToggle(year, month)}
-                                                                    className="flex-1"
-                                                                />
-                                                            </div>
-
-                                                            {/* Días (Hijos del Mes) */}
-                                                            {isMonthExpanded && (
-                                                                <div className="ml-1.5 pl-2 border-l border-gray-200 mt-0.5 space-y-0.5">
-                                                                    {dateTree[year][month].map(dateStr => (
-                                                                        <div key={dateStr} className="relative">
-                                                                             <div className="absolute -left-2 top-2.5 w-1.5 h-px bg-gray-200"></div>
-                                                                             <StyledCheckbox 
-                                                                                label={dateStr}
-                                                                                checked={selectedFechas.has(dateStr)}
-                                                                                onChange={() => toggleSetItem(selectedFechas, dateStr, setSelectedFechas)}
-                                                                            />
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
+                {/* Filtros Accordion Compactos */}
+                {data.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="bg-gray-50 p-2.5 border-b border-gray-100 flex justify-between items-center">
+                            <h3 className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-2 tracking-wider">
+                                <Filter className="w-3 h-3" /> Filtros Activos
+                            </h3>
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">
+                                {reporteAgrupado.length} items
+                            </span>
                         </div>
-                    </FilterSection>
+                        
+                        <div className="divide-y divide-gray-50">
+                            {/* Filtro Ejercicio */}
+                            <FilterSection 
+                                title="Ejercicio Fiscal" 
+                                icon={Calendar}
+                                isOpen={openSections.ejercicio}
+                                onToggle={() => toggleSection('ejercicio')}
+                                onSelectAll={() => selectAll(opcionesEjercicios, setSelectedEjercicios)}
+                                onDeselectAll={() => deselectAll(setSelectedEjercicios)}
+                                hasSelection={selectedEjercicios.size > 0}
+                                totalOptions={opcionesEjercicios.length}
+                                selectedCount={selectedEjercicios.size}
+                            >
+                                {opcionesEjercicios.map(ej => (
+                                    <StyledCheckbox 
+                                        key={ej} 
+                                        label={ej} 
+                                        checked={selectedEjercicios.has(ej)} 
+                                        onChange={() => toggleSetItem(selectedEjercicios, ej, setSelectedEjercicios)} 
+                                    />
+                                ))}
+                            </FilterSection>
+
+                            {/* Filtro Estado */}
+                            <FilterSection 
+                                title="Entidad Federativa" 
+                                icon={MapPin}
+                                isOpen={openSections.estado}
+                                onToggle={() => toggleSection('estado')}
+                                onSelectAll={() => selectAll(opcionesEstados, setSelectedEstados)}
+                                onDeselectAll={() => deselectAll(setSelectedEstados)}
+                                hasSelection={selectedEstados.size > 0}
+                                totalOptions={opcionesEstados.length}
+                                selectedCount={selectedEstados.size}
+                            >
+                                {opcionesEstados.map(estado => (
+                                    <StyledCheckbox 
+                                        key={estado} 
+                                        label={estado} 
+                                        checked={selectedEstados.has(estado)} 
+                                        onChange={() => toggleSetItem(selectedEstados, estado, setSelectedEstados)} 
+                                    />
+                                ))}
+                            </FilterSection>
+
+                            {/* Filtro Fechas Jerárquico (Árbol Compacto) */}
+                            <FilterSection 
+                                title="Fecha de Pago" 
+                                icon={Calendar}
+                                isOpen={openSections.fecha}
+                                onToggle={() => toggleSection('fecha')}
+                                onSelectAll={() => selectAll(data.map(d => d.fechaPago), setSelectedFechas)}
+                                onDeselectAll={() => deselectAll(setSelectedFechas)}
+                                hasSelection={selectedFechas.size > 0}
+                                totalOptions={data.length} // Aproximado
+                                selectedCount={selectedFechas.size}
+                            >
+                                <div className="space-y-1 mt-1">
+                                    {sortedYears.map(year => {
+                                        const yearStatus = getYearStatus(year);
+                                        const isYearExpanded = expandedDateNodes.has(year);
+                                        
+                                        return (
+                                            <div key={year} className="relative">
+                                                {/* Línea Guía del Año */}
+                                                
+                                                <div className="flex items-center group">
+                                                    <button 
+                                                        onClick={() => toggleDateNode(year)}
+                                                        className="p-0.5 mr-1 hover:bg-gray-100 rounded text-gray-400 hover:text-emerald-600 transition-colors"
+                                                    >
+                                                        {isYearExpanded ? <ChevronDown className="w-3 h-3"/> : <ChevronRight className="w-3 h-3"/>}
+                                                    </button>
+                                                    <StyledCheckbox 
+                                                        label={`Año ${year}`}
+                                                        checked={yearStatus === 'checked'}
+                                                        indeterminate={yearStatus === 'indeterminate'}
+                                                        onChange={() => handleYearToggle(year)}
+                                                        className="flex-1"
+                                                    />
+                                                </div>
+
+                                                {/* Meses (Hijos del Año) */}
+                                                {isYearExpanded && (
+                                                    <div className="ml-1.5 pl-2 border-l border-gray-200 space-y-1 mt-0.5 pb-1">
+                                                        {getSortedMonths(year).map((month, mIdx) => {
+                                                            const monthId = `${year}-${month}`;
+                                                            const monthStatus = getMonthStatus(year, month);
+                                                            const isMonthExpanded = expandedDateNodes.has(monthId);
+
+                                                            return (
+                                                                <div key={monthId} className="relative">
+                                                                    {/* Línea horizontal decorativa */}
+                                                                    <div className="absolute -left-2 top-2.5 w-1.5 h-px bg-gray-200"></div>
+
+                                                                    <div className="flex items-center">
+                                                                        <button 
+                                                                            onClick={() => toggleDateNode(monthId)}
+                                                                            className="p-0.5 mr-1 hover:bg-gray-100 rounded text-gray-400 hover:text-emerald-600 z-10 bg-white"
+                                                                        >
+                                                                            {isMonthExpanded ? <ChevronDown className="w-3 h-3"/> : <ChevronRight className="w-3 h-3"/>}
+                                                                        </button>
+                                                                        <StyledCheckbox 
+                                                                            label={getMonthName(month)}
+                                                                            checked={monthStatus === 'checked'}
+                                                                            indeterminate={monthStatus === 'indeterminate'}
+                                                                            onChange={() => handleMonthToggle(year, month)}
+                                                                            className="flex-1"
+                                                                        />
+                                                                    </div>
+
+                                                                    {/* Días (Hijos del Mes) */}
+                                                                    {isMonthExpanded && (
+                                                                        <div className="ml-1.5 pl-2 border-l border-gray-200 mt-0.5 space-y-0.5">
+                                                                            {dateTree[year][month].map(dateStr => (
+                                                                                <div key={dateStr} className="relative">
+                                                                                    <div className="absolute -left-2 top-2.5 w-1.5 h-px bg-gray-200"></div>
+                                                                                    <StyledCheckbox 
+                                                                                        label={dateStr}
+                                                                                        checked={selectedFechas.has(dateStr)}
+                                                                                        onChange={() => toggleSetItem(selectedFechas, dateStr, setSelectedFechas)}
+                                                                                    />
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </FilterSection>
+                        </div>
+                    </div>
+                )}
+                </div>
+
+                {/* CONTENT AREA */}
+                <div className="lg:col-span-9 space-y-5">
+                
+                {data.length === 0 && (
+                    <div className="h-80 flex flex-col items-center justify-center bg-white rounded-xl border-2 border-dashed border-gray-200 text-gray-400">
+                        <Leaf className="w-12 h-12 mb-3 opacity-20 text-emerald-500" />
+                        <p className="font-medium text-sm">Esperando archivo de datos...</p>
+                        <p className="text-xs">Sube un Excel o CSV para comenzar</p>
+                    </div>
+                )}
+
+                {data.length > 0 && (
+                    <>
+                        {/* Text Area para PDF */}
+                        <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-200">
+                            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                                <div className="flex-1 w-full">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block tracking-wide">Nota opcional para el reporte</label>
+                                    <div className="relative">
+                                        <FileText className="absolute left-3 top-2.5 w-4 h-4 text-gray-300" />
+                                        <input 
+                                            type="text"
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder-gray-400"
+                                            placeholder="Ej: Reporte cierre fiscal 2024..."
+                                            value={customHeaderText}
+                                            onChange={(e) => setCustomHeaderText(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                {/* Stats summary mini */}
+                                <div className="hidden sm:flex items-center gap-6 text-sm text-gray-500 px-4 border-l border-gray-100 h-10">
+                                    <div className="text-center">
+                                        <span className="block font-bold text-emerald-800 text-base leading-none">{totales.conteo}</span>
+                                        <span className="text-[9px] uppercase tracking-wider">Eventos</span>
+                                    </div>
+                                    <div className="text-center">
+                                        <span className="block font-bold text-emerald-800 text-base leading-none">{new Intl.NumberFormat('es-MX', { notation: "compact" }).format(totales.unidades)}</span>
+                                        <span className="text-[9px] uppercase tracking-wider">Cabezas</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* KPI Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-gradient-to-br from-emerald-900 to-emerald-800 p-4 rounded-xl shadow-sm text-white relative overflow-hidden group">
+                                <div className="absolute right-0 top-0 w-20 h-20 bg-white opacity-5 rounded-full -mr-6 -mt-6 transition-transform group-hover:scale-110"></div>
+                                <Hash className="absolute right-3 top-3 w-8 h-8 opacity-20" />
+                                <p className="text-emerald-100/80 text-[10px] font-bold uppercase tracking-widest mb-0.5">Total Eventos</p>
+                                <p className="text-3xl font-bold tracking-tight">{totales.conteo}</p>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden group">
+                                <Calculator className="absolute right-3 top-3 w-8 h-8 text-gray-100 group-hover:text-emerald-50 transition-colors" />
+                                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-0.5">Total Cabezas</p>
+                                <p className="text-3xl font-bold text-emerald-900 tracking-tight">{new Intl.NumberFormat('es-MX').format(totales.unidades)}</p>
+                            </div>
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden border-l-4 border-l-emerald-500 group">
+                                <DollarSign className="absolute right-3 top-3 w-8 h-8 text-emerald-50 group-hover:text-emerald-100 transition-colors" />
+                                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-0.5">Monto Indemnizado</p>
+                                <p className="text-3xl font-bold text-emerald-600 tracking-tight">{formatCurrency(totales.monto)}</p>
+                            </div>
+                        </div>
+
+                        {/* Tabla */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200 text-xs uppercase tracking-wider">
+                                        <tr>
+                                            <th className="py-3 px-6 font-semibold">Tipo de Seguro</th>
+                                            <th className="py-3 px-6 text-center font-semibold">Frecuencia</th>
+                                            <th className="py-3 px-6 text-right font-semibold">Cabezas</th>
+                                            <th className="py-3 px-6 text-right font-semibold">Monto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {reporteAgrupado.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-emerald-50/40 transition-colors group">
+                                                <td className="py-2.5 px-6 font-medium text-gray-700 group-hover:text-emerald-900">{row.nombre}</td>
+                                                <td className="py-2.5 px-6 text-center">
+                                                    <span className="bg-gray-100 text-gray-600 py-0.5 px-2 rounded text-[11px] font-bold group-hover:bg-emerald-100 group-hover:text-emerald-800 transition-colors border border-gray-200 group-hover:border-emerald-200">
+                                                        {row.conteo}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2.5 px-6 text-right font-mono text-gray-600 group-hover:text-emerald-700 text-xs">
+                                                    {new Intl.NumberFormat('es-MX').format(row.totalUnidades)}
+                                                </td>
+                                                <td className="py-2.5 px-6 text-right font-mono font-bold text-emerald-700 group-hover:text-emerald-900 text-xs">
+                                                    {formatCurrency(row.totalMonto)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        <tr className="bg-gray-50 font-bold border-t border-gray-200 text-xs">
+                                            <td className="py-3 px-6 text-emerald-900 uppercase tracking-wider">TOTALES</td>
+                                            <td className="py-3 px-6 text-center text-emerald-900">{totales.conteo}</td>
+                                            <td className="py-3 px-6 text-right text-emerald-900 font-mono">{new Intl.NumberFormat('es-MX').format(totales.unidades)}</td>
+                                            <td className="py-3 px-6 text-right text-emerald-700 font-mono text-sm">{formatCurrency(totales.monto)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </>
+                )}
                 </div>
             </div>
-          )}
-        </div>
+            </div>
+        );
+        };
 
-        {/* CONTENT AREA */}
-        <div className="lg:col-span-9 space-y-5">
-          
-          {data.length === 0 && (
-              <div className="h-80 flex flex-col items-center justify-center bg-white rounded-xl border-2 border-dashed border-gray-200 text-gray-400">
-                  <Leaf className="w-12 h-12 mb-3 opacity-20 text-emerald-500" />
-                  <p className="font-medium text-sm">Esperando archivo de datos...</p>
-                  <p className="text-xs">Sube un Excel o CSV para comenzar</p>
-              </div>
-          )}
-
-          {data.length > 0 && (
-              <>
-                {/* Text Area para PDF */}
-                <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-200">
-                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                        <div className="flex-1 w-full">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block tracking-wide">Nota opcional para el reporte</label>
-                            <div className="relative">
-                                <FileText className="absolute left-3 top-2.5 w-4 h-4 text-gray-300" />
-                                <input 
-                                    type="text"
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder-gray-400"
-                                    placeholder="Ej: Reporte cierre fiscal 2024..."
-                                    value={customHeaderText}
-                                    onChange={(e) => setCustomHeaderText(e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        {/* Stats summary mini */}
-                        <div className="hidden sm:flex items-center gap-6 text-sm text-gray-500 px-4 border-l border-gray-100 h-10">
-                            <div className="text-center">
-                                <span className="block font-bold text-emerald-800 text-base leading-none">{totales.conteo}</span>
-                                <span className="text-[9px] uppercase tracking-wider">Eventos</span>
-                            </div>
-                            <div className="text-center">
-                                <span className="block font-bold text-emerald-800 text-base leading-none">{new Intl.NumberFormat('es-MX', { notation: "compact" }).format(totales.unidades)}</span>
-                                <span className="text-[9px] uppercase tracking-wider">Cabezas</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* KPI Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-gradient-to-br from-emerald-900 to-emerald-800 p-4 rounded-xl shadow-sm text-white relative overflow-hidden group">
-                        <div className="absolute right-0 top-0 w-20 h-20 bg-white opacity-5 rounded-full -mr-6 -mt-6 transition-transform group-hover:scale-110"></div>
-                        <Hash className="absolute right-3 top-3 w-8 h-8 opacity-20" />
-                        <p className="text-emerald-100/80 text-[10px] font-bold uppercase tracking-widest mb-0.5">Total Eventos</p>
-                        <p className="text-3xl font-bold tracking-tight">{totales.conteo}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden group">
-                        <Calculator className="absolute right-3 top-3 w-8 h-8 text-gray-100 group-hover:text-emerald-50 transition-colors" />
-                        <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-0.5">Total Cabezas</p>
-                        <p className="text-3xl font-bold text-emerald-900 tracking-tight">{new Intl.NumberFormat('es-MX').format(totales.unidades)}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 relative overflow-hidden border-l-4 border-l-emerald-500 group">
-                        <DollarSign className="absolute right-3 top-3 w-8 h-8 text-emerald-50 group-hover:text-emerald-100 transition-colors" />
-                        <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-0.5">Monto Indemnizado</p>
-                        <p className="text-3xl font-bold text-emerald-600 tracking-tight">{formatCurrency(totales.monto)}</p>
-                    </div>
-                </div>
-
-                {/* Tabla */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200 text-xs uppercase tracking-wider">
-                                <tr>
-                                    <th className="py-3 px-6 font-semibold">Tipo de Seguro</th>
-                                    <th className="py-3 px-6 text-center font-semibold">Frecuencia</th>
-                                    <th className="py-3 px-6 text-right font-semibold">Cabezas</th>
-                                    <th className="py-3 px-6 text-right font-semibold">Monto</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {reporteAgrupado.map((row, idx) => (
-                                    <tr key={idx} className="hover:bg-emerald-50/40 transition-colors group">
-                                        <td className="py-2.5 px-6 font-medium text-gray-700 group-hover:text-emerald-900">{row.nombre}</td>
-                                        <td className="py-2.5 px-6 text-center">
-                                            <span className="bg-gray-100 text-gray-600 py-0.5 px-2 rounded text-[11px] font-bold group-hover:bg-emerald-100 group-hover:text-emerald-800 transition-colors border border-gray-200 group-hover:border-emerald-200">
-                                                {row.conteo}
-                                            </span>
-                                        </td>
-                                        <td className="py-2.5 px-6 text-right font-mono text-gray-600 group-hover:text-emerald-700 text-xs">
-                                            {new Intl.NumberFormat('es-MX').format(row.totalUnidades)}
-                                        </td>
-                                        <td className="py-2.5 px-6 text-right font-mono font-bold text-emerald-700 group-hover:text-emerald-900 text-xs">
-                                            {formatCurrency(row.totalMonto)}
-                                        </td>
-                                    </tr>
-                                ))}
-                                <tr className="bg-gray-50 font-bold border-t border-gray-200 text-xs">
-                                    <td className="py-3 px-6 text-emerald-900 uppercase tracking-wider">TOTALES</td>
-                                    <td className="py-3 px-6 text-center text-emerald-900">{totales.conteo}</td>
-                                    <td className="py-3 px-6 text-right text-emerald-900 font-mono">{new Intl.NumberFormat('es-MX').format(totales.unidades)}</td>
-                                    <td className="py-3 px-6 text-right text-emerald-700 font-mono text-sm">{formatCurrency(totales.monto)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-              </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default ReportePecuario;
+        const root = createRoot(document.getElementById('root'));
+        root.render(<ReportePecuario />);
+    </script>
+</body>
+</html>
