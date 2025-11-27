@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Siniestralidad por Seguro y Grupo</title>
+    <title>Reporte Pecuario - Seguro</title>
     
     <!-- Librería XLSX para leer Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -78,7 +78,7 @@
             <div class="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 class="text-2xl sm:text-3xl font-bold text-pantone dark:text-blue-400">
-                        Siniestralidad por Seguro y Grupo
+                        Reporte Pecuario - Seguro
                     </h1>
                     <p class="text-sm text-gray-500 mt-1">Procesamiento local y seguro de datos.</p>
                 </div>
@@ -180,7 +180,9 @@
                 'blue': [37, 99, 235],    'emerald': [5, 150, 105], 'violet': [124, 58, 237],
                 'amber': [217, 119, 6],   'rose': [225, 29, 72],    'cyan': [8, 145, 178],
                 'indigo': [79, 70, 229],  'teal': [13, 148, 136]
-            }
+            },
+            // Títulos del reporte
+            reportTitle: "Reporte Pecuario - Seguro"
         };
 
         /**
@@ -201,22 +203,15 @@
         // UI References
         const UI = {
             fileInput: document.getElementById('fileUpload'),
-            
-            // Containers
             exContainer: document.getElementById('exerciseFilterContainer'),
             perContainer: document.getElementById('periodFilterContainer'),
-            
-            // Buttons & Dropdowns
             exBtn: document.getElementById('exerciseBtn'),
             exBtnText: document.getElementById('exerciseBtnText'),
             exDropdown: document.getElementById('exerciseDropdown'),
-            
             perBtn: document.getElementById('periodBtn'),
             perBtnText: document.getElementById('periodBtnText'),
             perDropdown: document.getElementById('periodDropdown'),
-            
             overlay: document.getElementById('dropdownOverlay'),
-
             exportBtn: document.getElementById('exportButton'),
             pdfBtn: document.getElementById('pdfButton'),
             statusArea: document.getElementById('statusArea'),
@@ -225,12 +220,11 @@
             container: document.getElementById('dashboardContainer')
         };
 
-        // --- LISTENERS INICIALES ---
+        // --- LISTENERS ---
         UI.fileInput.addEventListener('change', handleFile);
         UI.exportBtn.addEventListener('click', exportAllTables);
         UI.pdfBtn.addEventListener('click', exportToPDF);
 
-        // Lógica de Dropdowns Multiselect
         UI.exBtn.addEventListener('click', () => toggleDropdown('exercise'));
         UI.perBtn.addEventListener('click', () => toggleDropdown('period'));
         UI.overlay.addEventListener('click', closeAllDropdowns);
@@ -238,9 +232,7 @@
         function toggleDropdown(type) {
             const dropdown = type === 'exercise' ? UI.exDropdown : UI.perDropdown;
             const isHidden = dropdown.classList.contains('hidden');
-            
-            closeAllDropdowns(); // Cerrar otros primero
-            
+            closeAllDropdowns();
             if (isHidden) {
                 dropdown.classList.remove('hidden');
                 UI.overlay.classList.remove('hidden');
@@ -253,7 +245,7 @@
             UI.overlay.classList.add('hidden');
         }
 
-        // --- LOGICA DE NEGOCIO ---
+        // --- LÓGICA DE NEGOCIO ---
 
         function normalizeInsuranceName(name) {
             if (!name) return null;
@@ -322,7 +314,6 @@
             AppState.periods.clear();
             AppState.exercises.clear();
             AppState.consolidationMap.clear();
-            
             const uniqueKeys = new Set();
 
             data.forEach(row => {
@@ -332,19 +323,15 @@
 
                 if (!ejercicio || !rawSeguro) return;
 
-                // Guardar Ejercicio
                 AppState.exercises.add(String(ejercicio));
 
-                // Guardar Periodo
                 const periodKey = getPeriodKey(fechaPago);
                 if (periodKey !== 'UNKNOWN') AppState.periods.add(periodKey);
 
-                // Procesar Seguro
                 const processedName = normalizeInsuranceName(rawSeguro);
                 const uniqueKey = `${processedName} - ${ejercicio}`;
                 uniqueKeys.add(uniqueKey);
 
-                // Consolidación
                 if (processedName === CONFIG.nombreGrupo) {
                     if (!AppState.consolidationMap.has(uniqueKey)) {
                         AppState.consolidationMap.set(uniqueKey, new Set());
@@ -356,8 +343,6 @@
             });
 
             AppState.segurosKeys = Array.from(uniqueKeys).sort();
-            
-            // Inicializar filtros con "Todo Seleccionado"
             AppState.selectedExercises = new Set(AppState.exercises);
             AppState.selectedPeriods = new Set(AppState.periods);
             
@@ -367,7 +352,6 @@
             renderDashboard();
         }
 
-        // --- CONSTRUCTOR DE DROPDOWNS MULTISELECT ---
         function buildMultiSelect(type) {
             const isExercise = type === 'exercise';
             const container = isExercise ? UI.exContainer : UI.perContainer;
@@ -377,7 +361,6 @@
             container.classList.remove('hidden');
             dropdown.innerHTML = '';
 
-            // Opción "Seleccionar Todo"
             const allDiv = document.createElement('div');
             allDiv.className = "px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700 cursor-pointer flex items-center";
             allDiv.innerHTML = `
@@ -385,7 +368,6 @@
                 <label for="all-${type}" class="ml-2 text-sm font-bold text-gray-700 dark:text-gray-200 cursor-pointer w-full">Seleccionar Todo</label>
             `;
             allDiv.addEventListener('click', (e) => {
-                // Prevenir doble disparo si se da click al checkbox directamente
                 if(e.target.tagName === 'INPUT') return toggleSelectAll(type, e.target.checked);
                 const checkbox = allDiv.querySelector('input');
                 checkbox.checked = !checkbox.checked;
@@ -393,18 +375,15 @@
             });
             dropdown.appendChild(allDiv);
 
-            // Lista de Opciones
             allItems.forEach(item => {
                 const label = isExercise ? item : formatPeriodLabel(item);
                 const val = item;
-                
                 const itemDiv = document.createElement('div');
                 itemDiv.className = "px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center";
                 itemDiv.innerHTML = `
                     <input type="checkbox" checked value="${val}" class="w-4 h-4 text-pantone rounded border-gray-300 focus:ring-pantone cursor-pointer item-check-${type}">
                     <span class="ml-2 text-sm text-gray-700 dark:text-gray-200">${label}</span>
                 `;
-                
                 itemDiv.addEventListener('click', (e) => {
                     if(e.target.tagName === 'INPUT') return updateSelection(type);
                     const checkbox = itemDiv.querySelector('input');
@@ -413,7 +392,6 @@
                 });
                 dropdown.appendChild(itemDiv);
             });
-
             updateButtonLabel(type);
         }
 
@@ -427,10 +405,8 @@
             const isExercise = type === 'exercise';
             const checkboxes = document.querySelectorAll(`.item-check-${type}`);
             const selectedSet = isExercise ? AppState.selectedExercises : AppState.selectedPeriods;
-            
             selectedSet.clear();
             let allChecked = true;
-
             checkboxes.forEach(cb => {
                 if (cb.checked) {
                     selectedSet.add(cb.value);
@@ -438,12 +414,9 @@
                     allChecked = false;
                 }
             });
-
-            // Actualizar estado visual del checkbox "Todos"
             document.getElementById(`all-${type}`).checked = allChecked;
-            
             updateButtonLabel(type);
-            renderDashboard(); // Re-renderizar automáticamente al cambiar selección
+            renderDashboard();
         }
 
         function updateButtonLabel(type) {
@@ -461,14 +434,11 @@
             }
         }
 
-        // --- RENDERIZADO DEL TABLERO ---
         function renderDashboard() {
             UI.container.innerHTML = '';
             AppState.tablesData = [];
-            
             let hasAnyData = false;
 
-            // Filtrar las claves de seguros primero por EJERCICIO seleccionado
             const visibleKeys = AppState.segurosKeys.filter(key => {
                 const [_, year] = key.split(' - ');
                 return AppState.selectedExercises.has(year);
@@ -497,21 +467,13 @@
 
         function generateTableForInsurance(key, color) {
             const [targetName, targetYear] = key.split(' - ');
-            
             const filteredRows = AppState.rawData.filter(row => {
                 const rowYear = String(row[CONFIG.cols.EJERCICIO]);
                 const rowName = normalizeInsuranceName(row[CONFIG.cols.SEGURO]);
                 const rowDate = row[CONFIG.cols.FECHA_PAGO];
-                
-                // 1. Filtro básico (Nombre y Año coinciden con la clave)
                 if (rowYear !== targetYear || rowName !== targetName) return false;
-
-                // 2. Filtro de Periodo (Multiselect)
                 const rowPeriod = getPeriodKey(rowDate);
-                // Si el periodo de la fila está en el Set de seleccionados, pasa.
-                // Nota: 'UNKNOWN' se descarta si no está seleccionado explícitamente (si implementáramos esa opción)
                 if (!AppState.selectedPeriods.has(rowPeriod)) return false;
-
                 return true;
             });
 
@@ -601,7 +563,6 @@
             return html;
         }
 
-        // --- UTILIDADES ---
         function formatCurrency(num) {
             return num.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 });
         }
@@ -630,13 +591,10 @@
         function exportAllTables() {
             if (AppState.tablesData.length === 0) return;
             const wb = XLSX.utils.book_new();
-            
-            // Etiqueta para el nombre de archivo Excel
             let label = "Reporte";
             if (AppState.selectedPeriods.size === AppState.periods.size) {
                 label = "Acumulado_Total";
             } else {
-                // Si es selección personalizada, usamos "Seleccion"
                 label = "Seleccion_Personalizada";
             }
 
@@ -688,7 +646,7 @@
                 }
                 XLSX.utils.book_append_sheet(wb, ws, sheetName);
             });
-            XLSX.writeFile(wb, `Reporte_Siniestralidad_${label}.xlsx`);
+            XLSX.writeFile(wb, `Reporte_Pecuario_${label}.xlsx`);
         }
 
         async function exportToPDF() {
@@ -700,33 +658,30 @@
             const margin = 14;
             const bottomMargin = 14;
             
-            // --- NUEVA LÓGICA DE ETIQUETA ---
             let periodLabel = "";
             if (AppState.selectedPeriods.size === AppState.periods.size) {
                 periodLabel = "Acumulado Total";
             } else {
-                // Ordenar periodos seleccionados cronológicamente
                 const sortedSelected = Array.from(AppState.selectedPeriods).sort();
-                // Formatear cada uno a "Mes Año" y unir con comas
                 const formattedLabels = sortedSelected.map(key => formatPeriodLabel(key));
                 periodLabel = formattedLabels.join(", ");
             }
 
-            doc.setFontSize(16);
+            // Título PDF Ajustado (12pt)
+            doc.setFontSize(12);
             doc.setTextColor(0, 61, 165); 
-            doc.text("Reporte de Siniestralidad por Seguro y Grupo", pageWidth / 2, 15, { align: 'center' });
+            doc.text(CONFIG.reportTitle, pageWidth / 2, 15, { align: 'center' });
             
-            doc.setFontSize(11);
+            // Subtítulo Periodo Ajustado (9pt)
+            doc.setFontSize(9);
             doc.setTextColor(100);
             
-            // Usar splitTextToSize para que el texto de periodos no se salga de la hoja si es muy largo
             const textStr = `Periodo: ${periodLabel}`;
             const splitTitle = doc.splitTextToSize(textStr, pageWidth - (margin * 2));
-            doc.text(splitTitle, pageWidth / 2, 22, { align: 'center' });
+            doc.text(splitTitle, pageWidth / 2, 20, { align: 'center' });
 
-            // Ajustar la posición Y inicial dependiendo de cuántas líneas ocupó el título
-            let finalY = 22 + (splitTitle.length * 5) + 5; 
-            if (finalY < 30) finalY = 30; // Mínimo margen de seguridad
+            let finalY = 20 + (splitTitle.length * 4) + 5; 
+            if (finalY < 30) finalY = 30; 
 
             for (let i = 0; i < AppState.tablesData.length; i++) {
                 const tableInfo = AppState.tablesData[i];
@@ -741,17 +696,20 @@
                         estimatedBlockHeight += (noteLines.length * 4) + 2; 
                     }
                 }
+                
+                // Cálculo de altura ajustado: 8mm por fila con letra 9pt
                 const rowCount = tableInfo.states.length + 1; 
                 const totalRows = rowCount + 1; 
-                const tableHeight = totalRows * 7.5; 
+                const tableHeight = totalRows * 8; 
                 estimatedBlockHeight += tableHeight;
+                
                 const spaceLeft = pageHeight - finalY - bottomMargin;
 
                 if (estimatedBlockHeight > spaceLeft && finalY > 30) {
                     doc.addPage();
-                    doc.setFontSize(10);
+                    doc.setFontSize(9);
                     doc.setTextColor(150);
-                    doc.text("Reporte de Siniestralidad (Continuación)", pageWidth / 2, 10, { align: 'center' });
+                    doc.text("Reporte (Continuación)", pageWidth / 2, 10, { align: 'center' });
                     finalY = 20; 
                 }
 
@@ -762,7 +720,7 @@
                 finalY += 6;
 
                 if (noteLines.length > 0) {
-                    doc.setFontSize(9);
+                    doc.setFontSize(8); // Nota un poco más pequeña
                     doc.setTextColor(80);
                     doc.text(noteLines, margin, finalY);
                     finalY += (noteLines.length * 4) + 2;
@@ -796,6 +754,7 @@
                     head: headers,
                     body: body,
                     theme: 'grid',
+                    pageBreak: 'avoid',
                     headStyles: { 
                         fillColor: rgbColor,
                         halign: 'center', 
@@ -805,9 +764,9 @@
                         0: { halign: 'left', fontStyle: 'bold', minCellWidth: 40 }, 
                     },
                     styles: {
-                        fontSize: 10, 
+                        fontSize: 9, // Letra de tabla ajustada a 9pt
                         halign: 'right', 
-                        cellPadding: 2,
+                        cellPadding: 1.5, // Padding ligeramente reducido
                         overflow: 'linebreak'
                     },
                     didParseCell: function(data) {
@@ -825,9 +784,8 @@
                 finalY = doc.lastAutoTable.finalY + 15;
             }
 
-            // Nombre de archivo seguro
             const safeLabel = periodLabel.replace(/[, ]+/g, "_").substring(0, 50);
-            doc.save(`Reporte_Siniestralidad_${safeLabel}.pdf`);
+            doc.save(`Reporte_Pecuario_${safeLabel}.pdf`);
         }
 
     </script>
