@@ -51,6 +51,20 @@
         .table-row-even { background-color: #f8fafc; }
         .dark .table-row-odd { background-color: #1f2937; }
         .dark .table-row-even { background-color: #111827; }
+        
+        /* Estilos para el dropdown multiselect */
+        .multiselect-dropdown {
+            max-height: 250px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+        .multiselect-dropdown::-webkit-scrollbar {
+            width: 6px;
+        }
+        .multiselect-dropdown::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 min-h-screen font-sans transition-colors duration-300">
@@ -70,12 +84,10 @@
                 </div>
                 <!-- Botonera de Acciones -->
                 <div class="flex flex-col sm:flex-row gap-2">
-                    <!-- Botón Exportar PDF -->
                     <button id="pdfButton" class="hidden inline-flex items-center px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg shadow-md transition-colors">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                         Exportar a PDF
                     </button>
-                    <!-- Botón Exportar Excel -->
                     <button id="exportButton" class="hidden inline-flex items-center px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg shadow-md transition-colors">
                         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.5l5.5 5.5V19a2 2 0 01-2 2z"></path></svg>
                         Descargar Excel
@@ -86,8 +98,10 @@
             <div class="p-6 sm:p-8 space-y-6">
 
                 <!-- CONTROLES -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-                    <div class="md:col-span-2">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-end bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                    
+                    <!-- 1. Carga de Archivo (Ancho completo en móvil, 4 columnas en desktop) -->
+                    <div class="md:col-span-4">
                         <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                             1. Archivo de Origen
                         </label>
@@ -95,15 +109,34 @@
                                class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold cursor-pointer focus:outline-none bg-white dark:bg-gray-800 rounded p-1 shadow-sm">
                     </div>
 
-                    <!-- Selector de Periodo -->
-                    <div id="filterSection" class="hidden">
-                        <label for="periodFilter" class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                            2. Filtrar por Periodo (Fecha Pago)
+                    <!-- 2. Filtro Ejercicio (Multiselect) -->
+                    <div id="exerciseFilterContainer" class="md:col-span-4 hidden relative">
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                            2. Ejercicio (Año)
                         </label>
-                        <select id="periodFilter" 
-                                class="block w-full p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-pantone focus:border-pantone shadow-sm font-medium">
-                            <option value="ALL">-- ACUMULADO (Todo) --</option>
-                        </select>
+                        <button id="exerciseBtn" class="w-full text-left bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-pantone flex justify-between items-center">
+                            <span id="exerciseBtnText">Seleccionar...</span>
+                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <!-- Dropdown Content -->
+                        <div id="exerciseDropdown" class="hidden absolute z-30 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl multiselect-dropdown">
+                            <!-- JS inyectará opciones aquí -->
+                        </div>
+                    </div>
+
+                    <!-- 3. Filtro Periodo (Multiselect) -->
+                    <div id="periodFilterContainer" class="md:col-span-4 hidden relative">
+                        <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                            3. Periodo (Mes)
+                        </label>
+                        <button id="periodBtn" class="w-full text-left bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-pantone flex justify-between items-center">
+                            <span id="periodBtnText">Seleccionar...</span>
+                            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <!-- Dropdown Content -->
+                        <div id="periodDropdown" class="hidden absolute z-30 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-xl multiselect-dropdown">
+                            <!-- JS inyectará opciones aquí -->
+                        </div>
                     </div>
                 </div>
 
@@ -113,12 +146,15 @@
                     <p id="statusText" class="mt-4 text-lg text-gray-600 dark:text-gray-300 font-medium">Procesando...</p>
                 </div>
 
-                <!-- CONTENEDOR DE TABLAS (Aquí se inyectarán todas las tablas) -->
+                <!-- CONTENEDOR DE TABLAS -->
                 <div id="dashboardContainer" class="space-y-12"></div>
 
             </div>
         </div>
     </main>
+
+    <!-- Overlay transparente para cerrar dropdowns al hacer click fuera -->
+    <div id="dropdownOverlay" class="fixed inset-0 z-20 hidden"></div>
 
     <script>
         /**
@@ -139,18 +175,11 @@
                 'ganadero por daños climatológicos cobertura limitada'
             ],
             nombreGrupo: 'Seguros Comerciales',
-            // Paleta de colores profesionales para rotar entre tablas
             palette: ['blue', 'emerald', 'violet', 'amber', 'rose', 'cyan', 'indigo', 'teal'],
-            // Mapa RGB para PDF (Coincide con colores Tailwind default 500/600 aprox)
             rgbMap: {
-                'blue': [37, 99, 235],    // Blue 600
-                'emerald': [5, 150, 105], // Emerald 600
-                'violet': [124, 58, 237], // Violet 600
-                'amber': [217, 119, 6],   // Amber 600
-                'rose': [225, 29, 72],    // Rose 600
-                'cyan': [8, 145, 178],    // Cyan 600
-                'indigo': [79, 70, 229],  // Indigo 600
-                'teal': [13, 148, 136]    // Teal 600
+                'blue': [37, 99, 235],    'emerald': [5, 150, 105], 'violet': [124, 58, 237],
+                'amber': [217, 119, 6],   'rose': [225, 29, 72],    'cyan': [8, 145, 178],
+                'indigo': [79, 70, 229],  'teal': [13, 148, 136]
             }
         };
 
@@ -160,16 +189,34 @@
         let AppState = {
             rawData: [],
             segurosKeys: [],            
-            periods: new Set(),         
+            periods: new Set(),
+            exercises: new Set(),      
             consolidationMap: new Map(),
-            tablesData: []              
+            tablesData: [],
+            // Filtros seleccionados (Set de valores)
+            selectedExercises: new Set(),
+            selectedPeriods: new Set()
         };
 
         // UI References
         const UI = {
             fileInput: document.getElementById('fileUpload'),
-            periodSelect: document.getElementById('periodFilter'),
-            filterSection: document.getElementById('filterSection'),
+            
+            // Containers
+            exContainer: document.getElementById('exerciseFilterContainer'),
+            perContainer: document.getElementById('periodFilterContainer'),
+            
+            // Buttons & Dropdowns
+            exBtn: document.getElementById('exerciseBtn'),
+            exBtnText: document.getElementById('exerciseBtnText'),
+            exDropdown: document.getElementById('exerciseDropdown'),
+            
+            perBtn: document.getElementById('periodBtn'),
+            perBtnText: document.getElementById('periodBtnText'),
+            perDropdown: document.getElementById('periodDropdown'),
+            
+            overlay: document.getElementById('dropdownOverlay'),
+
             exportBtn: document.getElementById('exportButton'),
             pdfBtn: document.getElementById('pdfButton'),
             statusArea: document.getElementById('statusArea'),
@@ -178,11 +225,33 @@
             container: document.getElementById('dashboardContainer')
         };
 
-        // Listeners
+        // --- LISTENERS INICIALES ---
         UI.fileInput.addEventListener('change', handleFile);
-        UI.periodSelect.addEventListener('change', renderDashboard);
         UI.exportBtn.addEventListener('click', exportAllTables);
         UI.pdfBtn.addEventListener('click', exportToPDF);
+
+        // Lógica de Dropdowns Multiselect
+        UI.exBtn.addEventListener('click', () => toggleDropdown('exercise'));
+        UI.perBtn.addEventListener('click', () => toggleDropdown('period'));
+        UI.overlay.addEventListener('click', closeAllDropdowns);
+
+        function toggleDropdown(type) {
+            const dropdown = type === 'exercise' ? UI.exDropdown : UI.perDropdown;
+            const isHidden = dropdown.classList.contains('hidden');
+            
+            closeAllDropdowns(); // Cerrar otros primero
+            
+            if (isHidden) {
+                dropdown.classList.remove('hidden');
+                UI.overlay.classList.remove('hidden');
+            }
+        }
+
+        function closeAllDropdowns() {
+            UI.exDropdown.classList.add('hidden');
+            UI.perDropdown.classList.add('hidden');
+            UI.overlay.classList.add('hidden');
+        }
 
         // --- LOGICA DE NEGOCIO ---
 
@@ -217,9 +286,7 @@
         }
 
         function normalizeGroup(raw) {
-            if (raw === null || raw === undefined || String(raw).trim() === '') {
-                return 'GRUPO 3';
-            }
+            if (raw === null || raw === undefined || String(raw).trim() === '') return 'GRUPO 3';
             const str = String(raw).toUpperCase().trim();
             if (str === '1' || str === 'GRUPO 1' || str === 'G1') return 'GRUPO 1';
             if (str === '2' || str === 'GRUPO 2' || str === 'G2') return 'GRUPO 2';
@@ -230,7 +297,7 @@
             const file = e.target.files[0];
             if (!file) return;
             resetUI();
-            showLoading(true, 'Analizando archivo y generando tablas...');
+            showLoading(true, 'Analizando archivo...');
             const reader = new FileReader();
             reader.onload = (evt) => {
                 try {
@@ -241,7 +308,7 @@
                     processData(rawJson);
                     showLoading(false);
                 } catch (err) {
-                    console.error("Error local de lectura", err);
+                    console.error("Error local", err);
                     showLoading(true, 'Error crítico al leer el archivo.');
                     UI.spinner.classList.add('hidden');
                 }
@@ -253,7 +320,9 @@
             AppState.rawData = data;
             AppState.segurosKeys = [];
             AppState.periods.clear();
+            AppState.exercises.clear();
             AppState.consolidationMap.clear();
+            
             const uniqueKeys = new Set();
 
             data.forEach(row => {
@@ -263,13 +332,19 @@
 
                 if (!ejercicio || !rawSeguro) return;
 
+                // Guardar Ejercicio
+                AppState.exercises.add(String(ejercicio));
+
+                // Guardar Periodo
                 const periodKey = getPeriodKey(fechaPago);
                 if (periodKey !== 'UNKNOWN') AppState.periods.add(periodKey);
 
+                // Procesar Seguro
                 const processedName = normalizeInsuranceName(rawSeguro);
                 const uniqueKey = `${processedName} - ${ejercicio}`;
                 uniqueKeys.add(uniqueKey);
 
+                // Consolidación
                 if (processedName === CONFIG.nombreGrupo) {
                     if (!AppState.consolidationMap.has(uniqueKey)) {
                         AppState.consolidationMap.set(uniqueKey, new Set());
@@ -281,32 +356,127 @@
             });
 
             AppState.segurosKeys = Array.from(uniqueKeys).sort();
-            populatePeriodFilter();
+            
+            // Inicializar filtros con "Todo Seleccionado"
+            AppState.selectedExercises = new Set(AppState.exercises);
+            AppState.selectedPeriods = new Set(AppState.periods);
+            
+            buildMultiSelect('exercise');
+            buildMultiSelect('period');
+            
             renderDashboard();
         }
 
-        function populatePeriodFilter() {
-            UI.periodSelect.innerHTML = '<option value="ALL">-- ACUMULADO (Todo) --</option>';
-            const sortedPeriods = Array.from(AppState.periods).sort().reverse();
-            sortedPeriods.forEach(pkey => {
-                const opt = document.createElement('option');
-                opt.value = pkey;
-                opt.textContent = formatPeriodLabel(pkey);
-                UI.periodSelect.appendChild(opt);
+        // --- CONSTRUCTOR DE DROPDOWNS MULTISELECT ---
+        function buildMultiSelect(type) {
+            const isExercise = type === 'exercise';
+            const container = isExercise ? UI.exContainer : UI.perContainer;
+            const dropdown = isExercise ? UI.exDropdown : UI.perDropdown;
+            const allItems = Array.from(isExercise ? AppState.exercises : AppState.periods).sort().reverse();
+            
+            container.classList.remove('hidden');
+            dropdown.innerHTML = '';
+
+            // Opción "Seleccionar Todo"
+            const allDiv = document.createElement('div');
+            allDiv.className = "px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700 cursor-pointer flex items-center";
+            allDiv.innerHTML = `
+                <input type="checkbox" checked class="w-4 h-4 text-pantone rounded border-gray-300 focus:ring-pantone cursor-pointer" id="all-${type}">
+                <label for="all-${type}" class="ml-2 text-sm font-bold text-gray-700 dark:text-gray-200 cursor-pointer w-full">Seleccionar Todo</label>
+            `;
+            allDiv.addEventListener('click', (e) => {
+                // Prevenir doble disparo si se da click al checkbox directamente
+                if(e.target.tagName === 'INPUT') return toggleSelectAll(type, e.target.checked);
+                const checkbox = allDiv.querySelector('input');
+                checkbox.checked = !checkbox.checked;
+                toggleSelectAll(type, checkbox.checked);
             });
-            UI.filterSection.classList.remove('hidden');
+            dropdown.appendChild(allDiv);
+
+            // Lista de Opciones
+            allItems.forEach(item => {
+                const label = isExercise ? item : formatPeriodLabel(item);
+                const val = item;
+                
+                const itemDiv = document.createElement('div');
+                itemDiv.className = "px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center";
+                itemDiv.innerHTML = `
+                    <input type="checkbox" checked value="${val}" class="w-4 h-4 text-pantone rounded border-gray-300 focus:ring-pantone cursor-pointer item-check-${type}">
+                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-200">${label}</span>
+                `;
+                
+                itemDiv.addEventListener('click', (e) => {
+                    if(e.target.tagName === 'INPUT') return updateSelection(type);
+                    const checkbox = itemDiv.querySelector('input');
+                    checkbox.checked = !checkbox.checked;
+                    updateSelection(type);
+                });
+                dropdown.appendChild(itemDiv);
+            });
+
+            updateButtonLabel(type);
+        }
+
+        function toggleSelectAll(type, isChecked) {
+            const checkboxes = document.querySelectorAll(`.item-check-${type}`);
+            checkboxes.forEach(cb => cb.checked = isChecked);
+            updateSelection(type);
+        }
+
+        function updateSelection(type) {
+            const isExercise = type === 'exercise';
+            const checkboxes = document.querySelectorAll(`.item-check-${type}`);
+            const selectedSet = isExercise ? AppState.selectedExercises : AppState.selectedPeriods;
+            
+            selectedSet.clear();
+            let allChecked = true;
+
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    selectedSet.add(cb.value);
+                } else {
+                    allChecked = false;
+                }
+            });
+
+            // Actualizar estado visual del checkbox "Todos"
+            document.getElementById(`all-${type}`).checked = allChecked;
+            
+            updateButtonLabel(type);
+            renderDashboard(); // Re-renderizar automáticamente al cambiar selección
+        }
+
+        function updateButtonLabel(type) {
+            const isExercise = type === 'exercise';
+            const selectedSet = isExercise ? AppState.selectedExercises : AppState.selectedPeriods;
+            const totalAvailable = isExercise ? AppState.exercises.size : AppState.periods.size;
+            const btnText = isExercise ? UI.exBtnText : UI.perBtnText;
+
+            if (selectedSet.size === 0) {
+                btnText.textContent = "Nada seleccionado";
+            } else if (selectedSet.size === totalAvailable) {
+                btnText.textContent = "Acumulado (Todo)";
+            } else {
+                btnText.textContent = `${selectedSet.size} seleccionados`;
+            }
         }
 
         // --- RENDERIZADO DEL TABLERO ---
         function renderDashboard() {
             UI.container.innerHTML = '';
             AppState.tablesData = [];
-            const selectedPeriod = UI.periodSelect.value;
+            
             let hasAnyData = false;
 
-            AppState.segurosKeys.forEach((key, index) => {
+            // Filtrar las claves de seguros primero por EJERCICIO seleccionado
+            const visibleKeys = AppState.segurosKeys.filter(key => {
+                const [_, year] = key.split(' - ');
+                return AppState.selectedExercises.has(year);
+            });
+
+            visibleKeys.forEach((key, index) => {
                 const themeColor = CONFIG.palette[index % CONFIG.palette.length];
-                const htmlTable = generateTableForInsurance(key, selectedPeriod, themeColor);
+                const htmlTable = generateTableForInsurance(key, themeColor);
                 if (htmlTable) {
                     hasAnyData = true;
                     const wrapper = document.createElement('div');
@@ -316,7 +486,7 @@
             });
 
             if (!hasAnyData) {
-                UI.container.innerHTML = `<div class="text-center text-gray-500 py-10 border-2 border-dashed border-gray-300 rounded-lg">No hay datos disponibles para el periodo seleccionado.</div>`;
+                UI.container.innerHTML = `<div class="text-center text-gray-500 py-10 border-2 border-dashed border-gray-300 rounded-lg">No hay datos disponibles para la selección actual.</div>`;
                 UI.exportBtn.classList.add('hidden');
                 UI.pdfBtn.classList.add('hidden');
             } else {
@@ -325,18 +495,23 @@
             }
         }
 
-        function generateTableForInsurance(key, filterPeriod, color) {
+        function generateTableForInsurance(key, color) {
             const [targetName, targetYear] = key.split(' - ');
             
             const filteredRows = AppState.rawData.filter(row => {
                 const rowYear = String(row[CONFIG.cols.EJERCICIO]);
                 const rowName = normalizeInsuranceName(row[CONFIG.cols.SEGURO]);
                 const rowDate = row[CONFIG.cols.FECHA_PAGO];
+                
+                // 1. Filtro básico (Nombre y Año coinciden con la clave)
                 if (rowYear !== targetYear || rowName !== targetName) return false;
-                if (filterPeriod !== 'ALL') {
-                    const rowPeriod = getPeriodKey(rowDate);
-                    if (rowPeriod !== filterPeriod) return false;
-                }
+
+                // 2. Filtro de Periodo (Multiselect)
+                const rowPeriod = getPeriodKey(rowDate);
+                // Si el periodo de la fila está en el Set de seleccionados, pasa.
+                // Nota: 'UNKNOWN' se descarta si no está seleccionado explícitamente (si implementáramos esa opción)
+                if (!AppState.selectedPeriods.has(rowPeriod)) return false;
+
                 return true;
             });
 
@@ -363,7 +538,7 @@
                 groups: Array.from(allGroups).sort(),
                 states: Array.from(pivot.keys()).sort(),
                 pivot: pivot,
-                colorName: color // Guardamos el nombre del color para el PDF
+                colorName: color
             });
 
             const sortedGroups = Array.from(allGroups).sort();
@@ -432,11 +607,11 @@
         }
 
         function resetUI() {
-            UI.filterSection.classList.add('hidden');
+            UI.exContainer.classList.add('hidden');
+            UI.perContainer.classList.add('hidden');
             UI.exportBtn.classList.add('hidden');
             UI.pdfBtn.classList.add('hidden');
             UI.container.innerHTML = '';
-            UI.periodSelect.innerHTML = '';
             UI.statusArea.classList.add('hidden');
         }
 
@@ -450,37 +625,36 @@
             }
         }
 
-        // --- EXPORTACION EXCEL MEJORADA (FORMATOS) ---
+        // --- EXPORTACIONES ---
+
         function exportAllTables() {
             if (AppState.tablesData.length === 0) return;
-
             const wb = XLSX.utils.book_new();
-            const periodLabel = UI.periodSelect.options[UI.periodSelect.selectedIndex].text.replace(/[:\/\\?*\[\]]/g, ""); 
+            
+            // Etiqueta para el nombre de archivo Excel
+            let label = "Reporte";
+            if (AppState.selectedPeriods.size === AppState.periods.size) {
+                label = "Acumulado_Total";
+            } else {
+                // Si es selección personalizada, usamos "Seleccion"
+                label = "Seleccion_Personalizada";
+            }
 
             AppState.tablesData.forEach(tableInfo => {
-                // Creamos el contenido fila por fila para tener control
                 const wsData = [];
-                
-                // 1. Título dentro de la hoja (fila 1)
                 wsData.push([`Reporte: ${tableInfo.name}`]);
-                wsData.push([]); // Fila vacía separadora
-
-                // 2. Encabezados (fila 3)
+                wsData.push([]); 
                 const headers = ["Estado", ...tableInfo.groups, "Total"];
                 wsData.push(headers);
-
-                // 3. Datos
                 let grandTotal = 0;
                 const colTotals = new Array(tableInfo.groups.length).fill(0);
-
                 tableInfo.states.forEach(estado => {
                     const row = [estado];
                     let rowTotal = 0;
                     const stateMap = tableInfo.pivot.get(estado);
-
                     tableInfo.groups.forEach((grp, idx) => {
                         const val = stateMap.get(grp) || 0;
-                        row.push(val); // Guardamos el NÚMERO, no el string
+                        row.push(val);
                         rowTotal += val;
                         colTotals[idx] += val;
                     });
@@ -488,130 +662,102 @@
                     grandTotal += rowTotal;
                     wsData.push(row);
                 });
-
-                // 4. Fila Total
                 const totalRow = ["GRAN TOTAL", ...colTotals, grandTotal];
                 wsData.push(totalRow);
-
-                // Crear Hoja
                 const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-                // --- MEJORAS VISUALES Y FORMATO ---
-                
-                // Rango de la hoja (para iterar celdas)
                 const range = XLSX.utils.decode_range(ws['!ref']);
-                
-                // Calcular anchos de columna (autowidth aproximado)
-                const colWidths = headers.map(h => ({ wch: h.length + 5 })); // Ancho mínimo basado en título
-
+                const colWidths = headers.map(h => ({ wch: h.length + 5 }));
                 for (let R = range.s.r; R <= range.e.r; ++R) {
                     for (let C = range.s.c; C <= range.e.c; ++C) {
                         const cellAddress = XLSX.utils.encode_cell({r: R, c: C});
                         const cell = ws[cellAddress];
                         if (!cell) continue;
-
-                        // A. Formato de Moneda para celdas numéricas
-                        // Omitimos la fila 1 (título) y 3 (encabezados)
                         if (cell.t === 'n') {
-                            // Formato Excel: "$ #,##0.00"
                             cell.z = '"$"#,##0.00';
                         }
-
-                        // B. Cálculo de ancho de columna
-                        // Estimamos longitud del contenido (sumamos un poco de padding)
                         const cellLength = String(cell.v).length + 2;
                         if (colWidths[C] && cellLength > colWidths[C].wch) {
                             colWidths[C].wch = cellLength;
                         }
                     }
                 }
-                
-                // Asignar anchos calculados
                 ws['!cols'] = colWidths;
-
-                // Nombre de hoja seguro
                 let sheetName = tableInfo.name.replace(/[:\/\\?*\[\]]/g, "").substring(0, 30);
                 if (wb.SheetNames.includes(sheetName)) {
                     sheetName = sheetName.substring(0, 27) + Math.floor(Math.random() * 99);
                 }
-
                 XLSX.utils.book_append_sheet(wb, ws, sheetName);
             });
-
-            XLSX.writeFile(wb, `Reporte_Siniestralidad_${periodLabel}.xlsx`);
+            XLSX.writeFile(wb, `Reporte_Siniestralidad_${label}.xlsx`);
         }
 
-        // --- EXPORTACION PDF MEJORADA (SIN CORTES) ---
         async function exportToPDF() {
             if (AppState.tablesData.length === 0) return;
-            
             const { jsPDF } = window.jspdf;
-            // CAMBIO: Orientación 'p' (Portrait/Vertical)
             const doc = new jsPDF('p', 'mm', 'a4'); 
             const pageWidth = doc.internal.pageSize.width;
             const pageHeight = doc.internal.pageSize.height;
             const margin = 14;
             const bottomMargin = 14;
             
-            const periodLabel = UI.periodSelect.options[UI.periodSelect.selectedIndex].text;
-            
-            // CAMBIO: Encabezado principal centrado para mejor presentación
+            // --- NUEVA LÓGICA DE ETIQUETA ---
+            let periodLabel = "";
+            if (AppState.selectedPeriods.size === AppState.periods.size) {
+                periodLabel = "Acumulado Total";
+            } else {
+                // Ordenar periodos seleccionados cronológicamente
+                const sortedSelected = Array.from(AppState.selectedPeriods).sort();
+                // Formatear cada uno a "Mes Año" y unir con comas
+                const formattedLabels = sortedSelected.map(key => formatPeriodLabel(key));
+                periodLabel = formattedLabels.join(", ");
+            }
+
             doc.setFontSize(16);
-            doc.setTextColor(0, 61, 165); // Pantone
+            doc.setTextColor(0, 61, 165); 
             doc.text("Reporte de Siniestralidad por Seguro y Grupo", pageWidth / 2, 15, { align: 'center' });
             
             doc.setFontSize(11);
             doc.setTextColor(100);
-            doc.text(`Periodo: ${periodLabel}`, pageWidth / 2, 22, { align: 'center' });
+            
+            // Usar splitTextToSize para que el texto de periodos no se salga de la hoja si es muy largo
+            const textStr = `Periodo: ${periodLabel}`;
+            const splitTitle = doc.splitTextToSize(textStr, pageWidth - (margin * 2));
+            doc.text(splitTitle, pageWidth / 2, 22, { align: 'center' });
 
-            let finalY = 30; 
+            // Ajustar la posición Y inicial dependiendo de cuántas líneas ocupó el título
+            let finalY = 22 + (splitTitle.length * 5) + 5; 
+            if (finalY < 30) finalY = 30; // Mínimo margen de seguridad
 
             for (let i = 0; i < AppState.tablesData.length; i++) {
                 const tableInfo = AppState.tablesData[i];
-                
-                // 1. CÁLCULO PREDICTIVO DE ALTURA (Ajustado al ancho vertical)
                 let estimatedBlockHeight = 0;
-                
-                // Altura del Título del Seguro
                 estimatedBlockHeight += 8; 
-                
-                // Altura de la Nota
                 let noteLines = [];
                 if (AppState.consolidationMap.has(tableInfo.name)) {
                     const originals = Array.from(AppState.consolidationMap.get(tableInfo.name)).join(', ');
                     if (originals) {
                         doc.setFontSize(9);
-                        // splitTextToSize usa el nuevo ancho vertical automáticamente
                         noteLines = doc.splitTextToSize(`Incluye: ${originals}`, pageWidth - (margin * 2));
                         estimatedBlockHeight += (noteLines.length * 4) + 2; 
                     }
                 }
-
-                // Altura de la Tabla
                 const rowCount = tableInfo.states.length + 1; 
                 const totalRows = rowCount + 1; 
                 const tableHeight = totalRows * 7.5; 
-                
                 estimatedBlockHeight += tableHeight;
-
-                // 2. VERIFICACIÓN DE ESPACIO
                 const spaceLeft = pageHeight - finalY - bottomMargin;
 
                 if (estimatedBlockHeight > spaceLeft && finalY > 30) {
                     doc.addPage();
-                    // Repetir encabezado en nuevas páginas para contexto
                     doc.setFontSize(10);
                     doc.setTextColor(150);
                     doc.text("Reporte de Siniestralidad (Continuación)", pageWidth / 2, 10, { align: 'center' });
                     finalY = 20; 
                 }
 
-                // --- DIBUJADO ---
                 const rgbColor = CONFIG.rgbMap[tableInfo.colorName] || [0, 61, 165];
-                
                 doc.setFontSize(12);
                 doc.setTextColor(...rgbColor);
-                // Título del seguro alineado a la izquierda con el margen
                 doc.text(`Seguro: ${tableInfo.name}`, margin, finalY);
                 finalY += 6;
 
@@ -631,7 +777,6 @@
                     const row = [estado];
                     let rowTotal = 0;
                     const stateMap = tableInfo.pivot.get(estado);
-
                     tableInfo.groups.forEach((grp, idx) => {
                         const val = stateMap.get(grp) || 0;
                         row.push(formatCurrency(val));
@@ -653,15 +798,14 @@
                     theme: 'grid',
                     headStyles: { 
                         fillColor: rgbColor,
-                        halign: 'center', // Encabezados centrados
+                        halign: 'center', 
                         fontStyle: 'bold'
                     },
                     columnStyles: {
-                        // Columna 0 (Estado) con ancho mínimo asegurado para legibilidad
                         0: { halign: 'left', fontStyle: 'bold', minCellWidth: 40 }, 
                     },
                     styles: {
-                        fontSize: 10, // Letra un poco más grande para mejor lectura
+                        fontSize: 10, 
                         halign: 'right', 
                         cellPadding: 2,
                         overflow: 'linebreak'
@@ -681,7 +825,9 @@
                 finalY = doc.lastAutoTable.finalY + 15;
             }
 
-            doc.save(`Reporte_Siniestralidad_${periodLabel.replace(/[^a-z0-9]/gi, '_')}.pdf`);
+            // Nombre de archivo seguro
+            const safeLabel = periodLabel.replace(/[, ]+/g, "_").substring(0, 50);
+            doc.save(`Reporte_Siniestralidad_${safeLabel}.pdf`);
         }
 
     </script>
