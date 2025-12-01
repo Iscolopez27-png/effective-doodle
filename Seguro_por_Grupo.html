@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reporte Pecuario - Seguro</title>
+    <title>Reporte Pecuario - Seguro por Grupo</title>
     
     <!-- Librería XLSX para leer Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -78,7 +78,7 @@
             <div class="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 class="text-2xl sm:text-3xl font-bold text-pantone dark:text-blue-400">
-                        Reporte Pecuario - Seguro
+                        Reporte Pecuario - Seguro por Grupo
                     </h1>
                     <p class="text-sm text-gray-500 mt-1">Procesamiento local y seguro de datos.</p>
                 </div>
@@ -140,6 +140,18 @@
                     </div>
                 </div>
 
+                <!-- SELECTOR DE VISTA -->
+                <div id="viewSelectorContainer" class="hidden flex justify-center pb-2">
+                    <div class="bg-gray-100 dark:bg-gray-700 p-1 rounded-lg inline-flex">
+                        <button id="btnViewDetail" class="px-6 py-2 text-sm font-bold rounded-md shadow-sm bg-white dark:bg-gray-600 text-pantone dark:text-white transition-all">
+                            Vista Detallada
+                        </button>
+                        <button id="btnViewSummary" class="px-6 py-2 text-sm font-medium rounded-md text-gray-600 dark:text-gray-300 hover:text-pantone dark:hover:text-white transition-all ml-1">
+                            Vista Resumen
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Estado de Carga -->
                 <div id="statusArea" class="py-12 text-center hidden">
                     <div id="loadingSpinner" class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-pantone border-r-transparent"></div>
@@ -174,7 +186,8 @@
                 'ataque de depredador cobertura limitada',
                 'ganadero por daños climatológicos cobertura limitada'
             ],
-            nombreGrupo: 'Seguros Comerciales',
+            // SEGUROS COMERCIALES EN MAYÚSCULAS
+            nombreGrupo: 'SEGUROS COMERCIALES',
             palette: ['blue', 'emerald', 'violet', 'amber', 'rose', 'cyan', 'indigo', 'teal'],
             rgbMap: {
                 'blue': [37, 99, 235],    'emerald': [5, 150, 105], 'violet': [124, 58, 237],
@@ -182,7 +195,7 @@
                 'indigo': [79, 70, 229],  'teal': [13, 148, 136]
             },
             // Títulos del reporte
-            reportTitle: "Reporte Pecuario - Seguro"
+            reportTitle: "Reporte Pecuario - Seguro por Grupo"
         };
 
         /**
@@ -195,22 +208,32 @@
             exercises: new Set(),      
             consolidationMap: new Map(),
             tablesData: [],
-            // Filtros seleccionados (Set de valores)
+            // Filtros seleccionados
             selectedExercises: new Set(),
-            selectedPeriods: new Set()
+            selectedPeriods: new Set(),
+            // Modo de Vista: 'detail' o 'summary'
+            viewMode: 'detail' 
         };
 
         // UI References
         const UI = {
             fileInput: document.getElementById('fileUpload'),
+            
             exContainer: document.getElementById('exerciseFilterContainer'),
             perContainer: document.getElementById('periodFilterContainer'),
+            viewContainer: document.getElementById('viewSelectorContainer'),
+            
             exBtn: document.getElementById('exerciseBtn'),
             exBtnText: document.getElementById('exerciseBtnText'),
             exDropdown: document.getElementById('exerciseDropdown'),
+            
             perBtn: document.getElementById('periodBtn'),
             perBtnText: document.getElementById('periodBtnText'),
             perDropdown: document.getElementById('periodDropdown'),
+            
+            btnViewDetail: document.getElementById('btnViewDetail'),
+            btnViewSummary: document.getElementById('btnViewSummary'),
+
             overlay: document.getElementById('dropdownOverlay'),
             exportBtn: document.getElementById('exportButton'),
             pdfBtn: document.getElementById('pdfButton'),
@@ -229,6 +252,10 @@
         UI.perBtn.addEventListener('click', () => toggleDropdown('period'));
         UI.overlay.addEventListener('click', closeAllDropdowns);
 
+        // Listeners de Vista
+        UI.btnViewDetail.addEventListener('click', () => switchView('detail'));
+        UI.btnViewSummary.addEventListener('click', () => switchView('summary'));
+
         function toggleDropdown(type) {
             const dropdown = type === 'exercise' ? UI.exDropdown : UI.perDropdown;
             const isHidden = dropdown.classList.contains('hidden');
@@ -243,6 +270,25 @@
             UI.exDropdown.classList.add('hidden');
             UI.perDropdown.classList.add('hidden');
             UI.overlay.classList.add('hidden');
+        }
+
+        function switchView(mode) {
+            if (AppState.viewMode === mode) return;
+            AppState.viewMode = mode;
+
+            // Actualizar estilo botones
+            const activeClass = "bg-white dark:bg-gray-600 text-pantone dark:text-white shadow-sm font-bold";
+            const inactiveClass = "text-gray-600 dark:text-gray-300 hover:text-pantone dark:hover:text-white font-medium";
+
+            if (mode === 'detail') {
+                UI.btnViewDetail.className = `px-6 py-2 text-sm rounded-md transition-all ${activeClass}`;
+                UI.btnViewSummary.className = `px-6 py-2 text-sm rounded-md transition-all ml-1 ${inactiveClass}`;
+            } else {
+                UI.btnViewSummary.className = `px-6 py-2 text-sm rounded-md transition-all ml-1 ${activeClass}`;
+                UI.btnViewDetail.className = `px-6 py-2 text-sm rounded-md transition-all ${inactiveClass}`;
+            }
+
+            renderDashboard();
         }
 
         // --- LÓGICA DE NEGOCIO ---
@@ -349,6 +395,9 @@
             buildMultiSelect('exercise');
             buildMultiSelect('period');
             
+            // Mostrar selector de vista
+            UI.viewContainer.classList.remove('hidden');
+            
             renderDashboard();
         }
 
@@ -434,11 +483,29 @@
             }
         }
 
+        // --- RENDERIZADO PRINCIPAL ---
         function renderDashboard() {
             UI.container.innerHTML = '';
-            AppState.tablesData = [];
-            let hasAnyData = false;
+            AppState.tablesData = []; // Reset datos de exportación
+            
+            if (AppState.viewMode === 'detail') {
+                renderDetailView();
+            } else {
+                renderSummaryView();
+            }
 
+            if (AppState.tablesData.length === 0) {
+                UI.container.innerHTML = `<div class="text-center text-gray-500 py-10 border-2 border-dashed border-gray-300 rounded-lg">No hay datos disponibles para la selección actual.</div>`;
+                UI.exportBtn.classList.add('hidden');
+                UI.pdfBtn.classList.add('hidden');
+            } else {
+                UI.exportBtn.classList.remove('hidden');
+                UI.pdfBtn.classList.remove('hidden');
+            }
+        }
+
+        // --- VISTA DETALLADA ---
+        function renderDetailView() {
             const visibleKeys = AppState.segurosKeys.filter(key => {
                 const [_, year] = key.split(' - ');
                 return AppState.selectedExercises.has(year);
@@ -448,21 +515,11 @@
                 const themeColor = CONFIG.palette[index % CONFIG.palette.length];
                 const htmlTable = generateTableForInsurance(key, themeColor);
                 if (htmlTable) {
-                    hasAnyData = true;
                     const wrapper = document.createElement('div');
                     wrapper.innerHTML = htmlTable;
                     UI.container.appendChild(wrapper);
                 }
             });
-
-            if (!hasAnyData) {
-                UI.container.innerHTML = `<div class="text-center text-gray-500 py-10 border-2 border-dashed border-gray-300 rounded-lg">No hay datos disponibles para la selección actual.</div>`;
-                UI.exportBtn.classList.add('hidden');
-                UI.pdfBtn.classList.add('hidden');
-            } else {
-                UI.exportBtn.classList.remove('hidden');
-                UI.pdfBtn.classList.remove('hidden');
-            }
         }
 
         function generateTableForInsurance(key, color) {
@@ -500,49 +557,135 @@
                 groups: Array.from(allGroups).sort(),
                 states: Array.from(pivot.keys()).sort(),
                 pivot: pivot,
-                colorName: color
+                colorName: color,
+                // Metadatos para exportación
+                rowHeader: "Estado" 
             });
 
-            const sortedGroups = Array.from(allGroups).sort();
-            const sortedStates = Array.from(pivot.keys()).sort();
+            return generateHTMLTable(key, allGroups, pivot, color, "Estado");
+        }
+
+        // --- VISTA EJECUTIVA (RESUMEN) ---
+        function renderSummaryView() {
+            // Filtrar todos los datos relevantes primero
+            const filteredRows = AppState.rawData.filter(row => {
+                const rowYear = String(row[CONFIG.cols.EJERCICIO]);
+                const rowDate = row[CONFIG.cols.FECHA_PAGO];
+                
+                // Filtros Globales
+                if (!AppState.selectedExercises.has(rowYear)) return false;
+                
+                const rowPeriod = getPeriodKey(rowDate);
+                if (!AppState.selectedPeriods.has(rowPeriod)) return false;
+                
+                return true;
+            });
+
+            if (filteredRows.length === 0) return;
+
+            // Pivote por SEGURO (InsuranceKey) en lugar de ESTADO
+            const pivot = new Map();
+            const allGroups = new Set();
+
+            filteredRows.forEach(row => {
+                const ejercicio = row[CONFIG.cols.EJERCICIO];
+                const rawSeguro = row[CONFIG.cols.SEGURO];
+                const processedName = normalizeInsuranceName(rawSeguro);
+                
+                // Validar seguro
+                if(!processedName) return;
+
+                const insuranceKey = `${processedName} - ${ejercicio}`; // Fila = Seguro
+                
+                const rawGrupo = row[CONFIG.cols.GRUPO];
+                const grupo = normalizeGroup(rawGrupo);
+                
+                let monto = parseFloat(row[CONFIG.cols.MONTO]);
+                if (isNaN(monto)) monto = 0;
+
+                allGroups.add(grupo);
+
+                if (!pivot.has(insuranceKey)) pivot.set(insuranceKey, new Map());
+                const insMap = pivot.get(insuranceKey);
+                insMap.set(grupo, (insMap.get(grupo) || 0) + monto);
+            });
+
+            // Ordenar filas alfabéticamente
+            // NOTA: Podemos usar AppState.segurosKeys para ordenar si queremos, 
+            // pero keys en pivot es más directo.
+            
+            // Generar un único objeto de tabla
+            const title = "Resumen Ejecutivo de Siniestralidad";
+            const color = "pantone"; // Color primario
+
+            AppState.tablesData.push({
+                name: title,
+                groups: Array.from(allGroups).sort(),
+                states: Array.from(pivot.keys()).sort(), // En este modo, 'states' son los Seguros
+                pivot: pivot,
+                colorName: 'blue',
+                rowHeader: "Seguro" // Cambia encabezado de primera columna
+            });
+
+            const html = generateHTMLTable(title, allGroups, pivot, "pantone", "Seguro");
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = html;
+            UI.container.appendChild(wrapper);
+        }
+
+        // --- GENERADOR HTML COMÚN ---
+        function generateHTMLTable(title, groupsSet, pivotData, color, firstColHeader) {
+            const sortedGroups = Array.from(groupsSet).sort();
+            const sortedRows = Array.from(pivotData.keys()).sort();
             const colTotals = new Map();
             let grandTotal = 0;
+
+            // Notas solo si es vista detallada (title coincide con key)
             let noteHtml = '';
-            if (AppState.consolidationMap.has(key)) {
-                const originals = Array.from(AppState.consolidationMap.get(key)).join(', ');
+            if (firstColHeader === "Estado" && AppState.consolidationMap.has(title)) {
+                const originals = Array.from(AppState.consolidationMap.get(title)).join(', ');
                 if (originals) {
                     noteHtml = `<div class="mb-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 p-2 rounded border-l-4 border-${color}-400"><strong>Incluye:</strong> ${originals}</div>`;
                 }
             }
 
+            // Manejo de colores Tailwind dinámicos vs estáticos
+            const bgHeader = color === 'pantone' ? 'bg-pantone text-white' : `bg-${color}-50 dark:bg-gray-800 text-${color}-800 dark:text-${color}-300`;
+            const borderHeader = color === 'pantone' ? 'border-pantone' : `border-${color}-600`;
+
             let html = `
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden transition-all hover:shadow-xl">
-                    <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-${color}-50 dark:bg-gray-800">
-                        <h2 class="text-xl font-bold text-${color}-800 dark:text-${color}-300 border-b-4 border-${color}-600 inline-block pb-1">
-                            Seguro: ${key}
+                    <div class="p-4 border-b border-gray-200 dark:border-gray-700 ${color === 'pantone' ? 'bg-gray-50' : 'bg-'+color+'-50'} dark:bg-gray-800">
+                        <h2 class="text-xl font-bold ${color === 'pantone' ? 'text-pantone' : 'text-'+color+'-800'} dark:text-white border-b-4 ${borderHeader} inline-block pb-1">
+                            ${title}
                         </h2>
                         ${noteHtml}
                     </div>
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead class="bg-${color}-50 dark:bg-gray-800">
+                            <thead class="bg-gray-100 dark:bg-gray-800">
                                 <tr>
-                                    <th class="sticky left-0 z-20 bg-${color}-50 dark:bg-gray-800 px-6 py-3 text-left text-xs font-bold text-${color}-800 dark:text-${color}-200 uppercase tracking-wider border-b-2 border-${color}-600">Estado</th>
-                                    ${sortedGroups.map(g => `<th class="px-6 py-3 text-right text-xs font-bold text-${color}-800 dark:text-${color}-200 uppercase tracking-wider border-b-2 border-${color}-600">${g}</th>`).join('')}
-                                    <th class="px-6 py-3 text-right text-xs font-extrabold text-${color}-900 dark:text-white uppercase tracking-wider border-b-2 border-${color}-600">Total</th>
+                                    <th class="sticky left-0 z-20 px-6 py-3 text-left text-xs font-bold uppercase tracking-wider border-b-2 ${borderHeader} ${color === 'pantone' ? 'text-gray-700 dark:text-gray-200' : 'text-'+color+'-800 dark:text-'+color+'-200'}">${firstColHeader}</th>
+                                    ${sortedGroups.map(g => `<th class="px-6 py-3 text-right text-xs font-bold uppercase tracking-wider border-b-2 ${borderHeader} ${color === 'pantone' ? 'text-gray-700 dark:text-gray-200' : 'text-'+color+'-800 dark:text-'+color+'-200'}">${g}</th>`).join('')}
+                                    <th class="px-6 py-3 text-right text-xs font-extrabold uppercase tracking-wider border-b-2 ${borderHeader} text-gray-900 dark:text-white">Total</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             `;
 
-            sortedStates.forEach((estado, idx) => {
+            sortedRows.forEach((rowKey, idx) => {
                 const rowClass = idx % 2 === 0 ? 'table-row-even' : 'table-row-odd';
-                const stateData = pivot.get(estado);
+                const rowData = pivotData.get(rowKey);
                 let rowTotal = 0;
-                html += `<tr class="${rowClass} hover:bg-${color}-50 dark:hover:bg-gray-700 transition-colors">`;
-                html += `<td class="sticky left-0 z-10 ${rowClass} px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-700 shadow-sm">${estado}</td>`;
+                
+                // Hover color dinámico
+                const hoverClass = color === 'pantone' ? 'hover:bg-blue-50' : `hover:bg-${color}-50`;
+
+                html += `<tr class="${rowClass} ${hoverClass} dark:hover:bg-gray-700 transition-colors">`;
+                html += `<td class="sticky left-0 z-10 ${rowClass} px-6 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white border-r border-gray-200 dark:border-gray-700 shadow-sm">${rowKey}</td>`;
+                
                 sortedGroups.forEach(grupo => {
-                    const val = stateData.get(grupo) || 0;
+                    const val = rowData.get(grupo) || 0;
                     rowTotal += val;
                     colTotals.set(grupo, (colTotals.get(grupo) || 0) + val);
                     const valStr = val === 0 ? '-' : formatCurrency(val);
@@ -552,17 +695,22 @@
                 html += `<td class="px-6 py-3 whitespace-nowrap text-sm font-bold text-gray-900 dark:text-white text-right border-l border-gray-200 dark:border-gray-700">${formatCurrency(rowTotal)}</td></tr>`;
             });
 
+            // Fila Totales
+            const totalBg = color === 'pantone' ? 'bg-blue-100' : `bg-${color}-100`;
+            
             html += `
-                <tr class="bg-${color}-100 dark:bg-${color}-900/30 font-bold border-t-2 border-${color}-600">
-                    <td class="sticky left-0 z-10 bg-${color}-200 dark:bg-gray-800 px-6 py-3 whitespace-nowrap text-sm uppercase text-${color}-900 dark:text-${color}-300 border-r border-${color}-300">Gran Total</td>
-                    ${sortedGroups.map(g => `<td class="px-6 py-3 whitespace-nowrap text-sm text-right text-${color}-900 dark:text-${color}-300">${formatCurrency(colTotals.get(g) || 0)}</td>`).join('')}
-                    <td class="px-6 py-3 whitespace-nowrap text-sm text-right text-${color}-900 dark:text-${color}-300 border-l border-${color}-300">${formatCurrency(grandTotal)}</td>
+                <tr class="${totalBg} dark:bg-gray-700 font-bold border-t-2 ${borderHeader}">
+                    <td class="sticky left-0 z-10 bg-gray-200 dark:bg-gray-800 px-6 py-3 whitespace-nowrap text-sm uppercase text-gray-900 dark:text-white border-r border-gray-300">Gran Total</td>
+                    ${sortedGroups.map(g => `<td class="px-6 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-white">${formatCurrency(colTotals.get(g) || 0)}</td>`).join('')}
+                    <td class="px-6 py-3 whitespace-nowrap text-sm text-right text-gray-900 dark:text-white border-l border-gray-300">${formatCurrency(grandTotal)}</td>
                 </tr>
             `;
             html += `</tbody></table></div></div>`;
             return html;
         }
 
+
+        // --- UTILIDADES ---
         function formatCurrency(num) {
             return num.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 });
         }
@@ -570,6 +718,7 @@
         function resetUI() {
             UI.exContainer.classList.add('hidden');
             UI.perContainer.classList.add('hidden');
+            UI.viewContainer.classList.add('hidden');
             UI.exportBtn.classList.add('hidden');
             UI.pdfBtn.classList.add('hidden');
             UI.container.innerHTML = '';
@@ -591,8 +740,11 @@
         function exportAllTables() {
             if (AppState.tablesData.length === 0) return;
             const wb = XLSX.utils.book_new();
+            
             let label = "Reporte";
-            if (AppState.selectedPeriods.size === AppState.periods.size) {
+            if (AppState.viewMode === 'summary') {
+                label = "Resumen_Ejecutivo";
+            } else if (AppState.selectedPeriods.size === AppState.periods.size) {
                 label = "Acumulado_Total";
             } else {
                 label = "Seleccion_Personalizada";
@@ -600,16 +752,22 @@
 
             AppState.tablesData.forEach(tableInfo => {
                 const wsData = [];
+                // Usar nombre de la tabla (en modo resumen es el título general)
                 wsData.push([`Reporte: ${tableInfo.name}`]);
                 wsData.push([]); 
-                const headers = ["Estado", ...tableInfo.groups, "Total"];
+                
+                // Usar el encabezado dinámico (Estado o Seguro)
+                const firstHeader = tableInfo.rowHeader || "Estado";
+                const headers = [firstHeader, ...tableInfo.groups, "Total"];
+                
                 wsData.push(headers);
                 let grandTotal = 0;
                 const colTotals = new Array(tableInfo.groups.length).fill(0);
-                tableInfo.states.forEach(estado => {
-                    const row = [estado];
+                
+                tableInfo.states.forEach(rowKey => {
+                    const row = [rowKey];
                     let rowTotal = 0;
-                    const stateMap = tableInfo.pivot.get(estado);
+                    const stateMap = tableInfo.pivot.get(rowKey);
                     tableInfo.groups.forEach((grp, idx) => {
                         const val = stateMap.get(grp) || 0;
                         row.push(val);
@@ -622,7 +780,9 @@
                 });
                 const totalRow = ["GRAN TOTAL", ...colTotals, grandTotal];
                 wsData.push(totalRow);
+                
                 const ws = XLSX.utils.aoa_to_sheet(wsData);
+                // ... (mismo código de formato de Excel) ...
                 const range = XLSX.utils.decode_range(ws['!ref']);
                 const colWidths = headers.map(h => ({ wch: h.length + 5 }));
                 for (let R = range.s.r; R <= range.e.r; ++R) {
@@ -640,13 +800,15 @@
                     }
                 }
                 ws['!cols'] = colWidths;
+                
+                // Nombre hoja
                 let sheetName = tableInfo.name.replace(/[:\/\\?*\[\]]/g, "").substring(0, 30);
                 if (wb.SheetNames.includes(sheetName)) {
                     sheetName = sheetName.substring(0, 27) + Math.floor(Math.random() * 99);
                 }
                 XLSX.utils.book_append_sheet(wb, ws, sheetName);
             });
-            XLSX.writeFile(wb, `Reporte_Pecuario_${label}.xlsx`);
+            XLSX.writeFile(wb, `Reporte_Pecuario_Grupo_${label}.xlsx`);
         }
 
         async function exportToPDF() {
@@ -667,12 +829,10 @@
                 periodLabel = formattedLabels.join(", ");
             }
 
-            // Título PDF Ajustado (12pt)
             doc.setFontSize(12);
             doc.setTextColor(0, 61, 165); 
             doc.text(CONFIG.reportTitle, pageWidth / 2, 15, { align: 'center' });
             
-            // Subtítulo Periodo Ajustado (9pt)
             doc.setFontSize(9);
             doc.setTextColor(100);
             
@@ -687,8 +847,10 @@
                 const tableInfo = AppState.tablesData[i];
                 let estimatedBlockHeight = 0;
                 estimatedBlockHeight += 8; 
+                
+                // Nota solo aplica si estamos en modo detalle y existe consolidación
                 let noteLines = [];
-                if (AppState.consolidationMap.has(tableInfo.name)) {
+                if (AppState.viewMode === 'detail' && AppState.consolidationMap.has(tableInfo.name)) {
                     const originals = Array.from(AppState.consolidationMap.get(tableInfo.name)).join(', ');
                     if (originals) {
                         doc.setFontSize(9);
@@ -697,7 +859,6 @@
                     }
                 }
                 
-                // Cálculo de altura ajustado: 8mm por fila con letra 9pt
                 const rowCount = tableInfo.states.length + 1; 
                 const totalRows = rowCount + 1; 
                 const tableHeight = totalRows * 8; 
@@ -716,25 +877,30 @@
                 const rgbColor = CONFIG.rgbMap[tableInfo.colorName] || [0, 61, 165];
                 doc.setFontSize(12);
                 doc.setTextColor(...rgbColor);
-                doc.text(`Seguro: ${tableInfo.name}`, margin, finalY);
+                
+                // Título tabla
+                doc.text(tableInfo.name, margin, finalY);
                 finalY += 6;
 
                 if (noteLines.length > 0) {
-                    doc.setFontSize(8); // Nota un poco más pequeña
+                    doc.setFontSize(8); 
                     doc.setTextColor(80);
                     doc.text(noteLines, margin, finalY);
                     finalY += (noteLines.length * 4) + 2;
                 }
 
-                const headers = [["Estado", ...tableInfo.groups, "Total"]];
+                // Encabezado dinámico PDF
+                const firstHeader = tableInfo.rowHeader || "Estado";
+                const headers = [[firstHeader, ...tableInfo.groups, "Total"]];
+                
                 const body = [];
                 let grandTotal = 0;
                 const colTotals = new Array(tableInfo.groups.length).fill(0);
 
-                tableInfo.states.forEach(estado => {
-                    const row = [estado];
+                tableInfo.states.forEach(rowKey => {
+                    const row = [rowKey];
                     let rowTotal = 0;
-                    const stateMap = tableInfo.pivot.get(estado);
+                    const stateMap = tableInfo.pivot.get(rowKey);
                     tableInfo.groups.forEach((grp, idx) => {
                         const val = stateMap.get(grp) || 0;
                         row.push(formatCurrency(val));
@@ -764,9 +930,9 @@
                         0: { halign: 'left', fontStyle: 'bold', minCellWidth: 40 }, 
                     },
                     styles: {
-                        fontSize: 9, // Letra de tabla ajustada a 9pt
+                        fontSize: 9, 
                         halign: 'right', 
-                        cellPadding: 1.5, // Padding ligeramente reducido
+                        cellPadding: 1.5, 
                         overflow: 'linebreak'
                     },
                     didParseCell: function(data) {
@@ -785,7 +951,7 @@
             }
 
             const safeLabel = periodLabel.replace(/[, ]+/g, "_").substring(0, 50);
-            doc.save(`Reporte_Pecuario_${safeLabel}.pdf`);
+            doc.save(`Reporte_Pecuario_Grupo_${safeLabel}.pdf`);
         }
 
     </script>
